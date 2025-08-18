@@ -1,0 +1,133 @@
+openapi: 3.0.3
+info:
+  title: Credit Card Service API
+  version: 1.0.0
+  description: API for managing credit cards
+
+servers:
+  - url: http://localhost:8080/api/v1
+
+paths:
+  /credit-cards:
+    get:
+      summary: Get all credit cards
+      operationId: getAllCreditCards
+      responses:
+        '200':
+          description: List of credit cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CreditCard'
+    post:
+      summary: Create a new credit card
+      operationId: createCreditCard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditCard'
+      responses:
+        '201':
+          description: Credit card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCard'
+
+  /credit-cards/{id}:
+    get:
+      summary: Get a credit card by ID
+      operationId: getCreditCardById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit card found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCard'
+        '404':
+          description: Credit card not found
+    put:
+      summary: Update a credit card by ID
+      operationId: updateCreditCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditCard'
+      responses:
+        '200':
+          description: Credit card updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreditCard'
+        '404':
+          description: Credit card not found
+    delete:
+      summary: Delete a credit card by ID
+      operationId: deleteCreditCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Credit card deleted
+        '404':
+          description: Credit card not found
+
+components:
+  schemas:
+    CreditCard:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "abc123"
+        customerId:
+          type: string
+          example: "cust001"
+        cardType:
+          type: string
+          enum: [VISA, MASTERCARD, AMEX]
+          example: VISA
+        creditLimit:
+          type: number
+          format: double
+          example: 5000.00
+        currentBalance:
+          type: number
+          format: double
+          example: 1200.50
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED]
+          example: ACTIVE
+        createdAt:
+          type: string
+          format: date-time
+          example: 2025-08-18T10:15:30Z
+        updatedAt:
+          type: string
+          format: date-time
+          example: 2025-08-18T10:15:30Z
