@@ -1,17 +1,32 @@
 openapi: 3.0.3
 info:
-  title: Credit Card Service API
+  title: Card Service API
   version: 1.0.0
-  description: API for managing credit cards
+  description: API for managing credit cards (personal and enterprise)
 
 servers:
-  - url: http://localhost:8080/api/v1
+  - url: http://localhost:8081/api/v1
 
 paths:
-  /credit-cards:
+  /cards:
     get:
       summary: Get all credit cards
       operationId: getAllCreditCards
+      parameters:
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter credit cards by customer ID
+          example: "68a0cdde7d68c910da0bc239"
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter credit cards by active status (default = true)
+          example: true
       responses:
         '200':
           description: List of credit cards
@@ -20,7 +35,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CreditCard'
+                  $ref: '#/components/schemas/CardResponse'
     post:
       summary: Create a new credit card
       operationId: createCreditCard
@@ -29,16 +44,41 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreditCard'
+              $ref: '#/components/schemas/CardCreateRequest'
       responses:
         '201':
           description: Credit card created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreditCard'
+                $ref: '#/components/schemas/CardResponse'
+        '400':
+          description: Bad request - Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              examples:
+                personalCreditCardExists:
+                  summary: Personal customer already has a credit card
+                  value:
+                    code: "PERSON_ALREADY_HAS_CREDIT_CARD"
+                    message: "Personal customers can only have one active credit card"
+                    timestamp: "2025-08-24T10:15:30Z"
+                customerNotFound:
+                  summary: Customer not found
+                  value:
+                    code: "CUSTOMER_NOT_FOUND"
+                    message: "Customer with provided ID does not exist"
+                    timestamp: "2025-08-24T10:15:30Z"
 
-  /credit-cards/{id}:
+  /cards/{id}:
     get:
       summary: Get a credit card by ID
       operationId: getCreditCardById
@@ -54,9 +94,13 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreditCard'
+                $ref: '#/components/schemas/CardResponse'
         '404':
           description: Credit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       summary: Update a credit card by ID
       operationId: updateCreditCard
@@ -71,16 +115,26 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreditCard'
+              $ref: '#/components/schemas/CardUpdateRequest'
       responses:
         '200':
           description: Credit card updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreditCard'
+                $ref: '#/components/schemas/CardResponse'
         '404':
           description: Credit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Bad request - Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       summary: Delete a credit card by ID
       operationId: deleteCreditCard
@@ -95,34 +149,150 @@ paths:
           description: Credit card deleted
         '404':
           description: Credit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+
+  /cards/{id}/deactivate:
+    patch:
+      summary: Soft delete (deactivate) a credit card by ID
+      description: Marks the credit card as inactive without physically removing it
+      operationId: deactivateCreditCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit card deactivated (isActive set to false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '404':
+          description: Credit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{id}/activate:
+    patch:
+      summary: Reactivate a credit card by ID
+      description: Marks the credit card as active again
+      operationId: activateCreditCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Credit card activated (isActive set to true)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '404':
+          description: Credit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
-    CreditCard:
+    CardCreateRequest:
+      type: object
+      properties:
+        cardNumber:
+          type: string
+          example: "1234-5678-9123-4567"
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        creditLimit:
+          type: number
+          format: double
+          example: 10000.00
+        type:
+          type: string
+          enum: ["PERSONAL", "ENTERPRISE"]
+          example: "PERSONAL"
+        availableCredit:
+          type: number
+          format: double
+          example: 8000
+        currentBalance:
+          type: number
+          format: double
+          example: 4000
+      required:
+        - cardNumber
+        - customerId
+        - creditLimit
+        - type
+
+    CardUpdateRequest:
+      type: object
+      properties:
+        creditLimit:
+          type: number
+          format: double
+          example: 12000.00
+        availableCredit:
+          type: number
+          format: double
+          example: 8000
+        currentBalance:
+          type: number
+          format: double
+          example: 4000
+        isActive:
+          type: boolean
+          example: true
+      required:
+        - creditLimit
+        - availableCredit
+        - currentBalance
+        - isActive
+
+    CardResponse:
       type: object
       properties:
         id:
           type: string
-          example: "abc123"
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        cardNumber:
+          type: string
+          example: "1234-5678-9123-4567"
         customerId:
           type: string
-          example: "cust001"
-        cardType:
+          example: "68a0cdde7d68c910da0bc239"
+        type:
           type: string
-          enum: [VISA, MASTERCARD, AMEX]
-          example: VISA
+          enum: ["PERSONAL", "ENTERPRISE"]
+          example: "PERSONAL"
         creditLimit:
           type: number
           format: double
-          example: 5000.00
+          example: 10000.00
+        availableCredit:
+          type: number
+          format: double
+          example: 6000
         currentBalance:
           type: number
           format: double
-          example: 1200.50
-        status:
-          type: string
-          enum: [ACTIVE, BLOCKED]
-          example: ACTIVE
+          example: 4000
+        isActive:
+          type: boolean
+          example: true
         createdAt:
           type: string
           format: date-time
@@ -131,3 +301,21 @@ components:
           type: string
           format: date-time
           example: 2025-08-18T10:15:30Z
+
+    ErrorResponse:
+      type: object
+      properties:
+        code:
+          type: string
+          example: "PERSON_ALREADY_HAS_CREDIT_CARD"
+        message:
+          type: string
+          example: "Personal customers can only have one active credit card"
+        timestamp:
+          type: string
+          format: date-time
+          example: "2025-08-24T10:15:30Z"
+      required:
+        - code
+        - message
+        - timestamp

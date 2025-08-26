@@ -1,9 +1,17 @@
 package com.bootcamp.ntt.card_service.repository;
 
-import com.bootcamp.ntt.cardservice.model.CreditCard;
+import com.bootcamp.ntt.card_service.entity.Card;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @Repository
-public interface CardRepository extends JpaRepository<CreditCard,String> {
+public interface CardRepository extends ReactiveMongoRepository<Card,String> {
+
+  Flux<Card> findByIsActive(Boolean isActive);
+  Flux<Card> findByCustomerId(String customerId);
+  Mono<Long> countByCustomerIdAndIsActiveTrue(String customerId);
+
 }

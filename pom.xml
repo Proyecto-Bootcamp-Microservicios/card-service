@@ -209,15 +209,16 @@
               <modelPackage>com.bootcamp.ntt.cardservice.model</modelPackage>
               <supportingFilesToGenerate>ApiUtil.java</supportingFilesToGenerate>
               <configOptions>
+                <reactive>true</reactive>
                 <delegatePattern>true</delegatePattern>
-                <interfaceOnly>true</interfaceOnly>
                 <useSpringBoot3>false</useSpringBoot3>
-                <java8>false</java8>
+                <java8>true</java8>
                 <dateLibrary>java8</dateLibrary>
                 <serializationLibrary>jackson</serializationLibrary>
                 <useBeanValidation>true</useBeanValidation>
                 <performBeanValidation>true</performBeanValidation>
               </configOptions>
+              <enablePostProcessFile>true</enablePostProcessFile>
             </configuration>
           </execution>
         </executions>
