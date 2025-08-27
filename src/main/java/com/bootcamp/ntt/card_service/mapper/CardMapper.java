@@ -2,9 +2,9 @@ package com.bootcamp.ntt.card_service.mapper;
 
 import com.bootcamp.ntt.card_service.entity.Card;
 import com.bootcamp.ntt.card_service.entity.CardType;
-import com.bootcamp.ntt.cardservice.model.CardCreateRequest;
-import com.bootcamp.ntt.cardservice.model.CardResponse;
-import com.bootcamp.ntt.cardservice.model.CardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.CardCreateRequest;
+import com.bootcamp.ntt.card_service.model.CardResponse;
+import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -18,16 +18,19 @@ public class CardMapper {
       return null;
     }
 
-    Card Card = new Card();
-    Card.setCardNumber(dto.getCardNumber());
-    Card.setCustomerId(dto.getCustomerId());
-    Card.setType(CardType.valueOf(customerType));
-    Card.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));
-    Card.setAvailableCredit(
+    Card card = new Card();
+    card.setCardNumber(dto.getCardNumber());
+    card.setCustomerId(dto.getCustomerId());
+    card.setType(CardType.valueOf(customerType));
+    card.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));
+    card.setAvailableCredit(
       dto.getAvailableCredit() != null ? BigDecimal.valueOf(dto.getAvailableCredit()) : BigDecimal.ZERO
     );
-    Card.setActive(true);
-    return Card;
+    card.setCurrentBalance(
+      dto.getCurrentBalance() != null ? BigDecimal.valueOf(dto.getCurrentBalance()) : BigDecimal.ZERO
+    );
+    card.setActive(true);
+    return card;
   }
 
 
@@ -43,6 +46,10 @@ public class CardMapper {
 
     if (dto.getAvailableCredit() != null) {
       existing.setAvailableCredit(BigDecimal.valueOf(dto.getAvailableCredit()));
+    }
+
+    if (dto.getCurrentBalance() != null) {
+      existing.setCurrentBalance(BigDecimal.valueOf(dto.getCurrentBalance()));
     }
 
     if (dto.getIsActive() != null) {
@@ -63,6 +70,7 @@ public class CardMapper {
     response.setType(CardResponse.TypeEnum.valueOf(entity.getType().name()));
     response.setCreditLimit(entity.getCreditLimit().doubleValue());
     response.setAvailableCredit(entity.getAvailableCredit().doubleValue());
+    response.setCurrentBalance(entity.getCurrentBalance().doubleValue());
     response.setIsActive(entity.isActive());
 
     response.setCreatedAt(entity.getCreatedAt() != null ? entity.getCreatedAt().atOffset(ZoneOffset.UTC) : null);

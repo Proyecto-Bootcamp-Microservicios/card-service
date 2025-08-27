@@ -1,23 +1,22 @@
 package com.bootcamp.ntt.card_service.service;
 
-import com.bootcamp.ntt.card_service.repository.CardRepository;
-import com.bootcamp.ntt.card_service.entity.Card;
-import com.bootcamp.ntt.cardservice.model.CardCreateRequest;
-import com.bootcamp.ntt.cardservice.model.CardResponse;
-import com.bootcamp.ntt.cardservice.model.CardUpdateRequest;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
+import com.bootcamp.ntt.card_service.model.CardCreateRequest;
+import com.bootcamp.ntt.card_service.model.CardResponse;
+import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.ArrayList;
-import java.util.List;
 
 public interface CardService {
 
   Flux<CardResponse> getAllCards(Boolean isActive);
 
+  Flux<CardResponse> getCardsByActive(Boolean isActive);
+
   Mono<CardResponse> getCardById(String id);
+
+  Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId);
+
 
   Mono<CardResponse> createCard(CardCreateRequest cardRequest);
 

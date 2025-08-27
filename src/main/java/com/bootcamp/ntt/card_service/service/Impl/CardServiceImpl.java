@@ -1,14 +1,13 @@
 package com.bootcamp.ntt.card_service.service.Impl;
 
 import com.bootcamp.ntt.card_service.client.CustomerClient;
-import com.bootcamp.ntt.card_service.entity.Card;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.mapper.CardMapper;
 import com.bootcamp.ntt.card_service.repository.CardRepository;
 import com.bootcamp.ntt.card_service.service.CardService;
-import com.bootcamp.ntt.cardservice.model.CardCreateRequest;
-import com.bootcamp.ntt.cardservice.model.CardResponse;
-import com.bootcamp.ntt.cardservice.model.CardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.CardCreateRequest;
+import com.bootcamp.ntt.card_service.model.CardResponse;
+import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -31,16 +30,23 @@ public class CardServiceImpl implements CardService {
 
   @Override
   public Flux<CardResponse> getAllCards(Boolean isActive) {
-    Flux<Card> cards;
-    if (isActive == null) {
-      cards = cardRepository.findAll(); // todas
-    } else {
-      cards = cardRepository.findByIsActive(isActive); // activas o inactivas
-    }
-
-    return cards
+    return cardRepository.findAll()
       .map(cardMapper::toResponse)
-      .doOnComplete(() -> log.debug("Credit cards retrieved with filter isActive={}", isActive));
+      .doOnComplete(() -> log.debug("Cards retrieved"));
+  }
+
+  @Override
+  public Flux<CardResponse> getCardsByActive(Boolean isActive) {
+    return cardRepository.findByIsActive(isActive)
+      .map(cardMapper::toResponse)
+      .doOnComplete(() -> log.debug("Active cards retrieved"));
+  }
+
+  @Override
+  public Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId) {
+    return cardRepository.findByIsActiveAndCustomerId(isActive, customerId)
+      .map(cardMapper::toResponse)
+      .doOnComplete(() -> log.debug("Cards active by customer retrieved "));
   }
 
   @Override
@@ -50,16 +56,16 @@ public class CardServiceImpl implements CardService {
       .map(cardMapper::toResponse)
       .doOnSuccess(credit -> {
         if (credit != null) {
-          log.debug("Credit card found with ID: {}", id);
+          log.debug("Card found with ID: {}", id);
         } else {
-          log.debug("Credit card not found with ID: {}", id);
+          log.debug("Card not found with ID: {}", id);
         }
       });
   }
 
   @Override
   public Mono<CardResponse> createCard(CardCreateRequest cardRequest) {
-    log.debug("Creating credit for customer: {}", cardRequest.getCustomerId());
+    /*log.debug("Creating card for customer: {}", cardRequest.getCustomerId());
 
     return customerClient.getCustomerType(cardRequest.getCustomerId())
       .flatMap(customerType -> validateCreditCreation(cardRequest.getCustomerId(), customerType.getType())
@@ -67,21 +73,22 @@ public class CardServiceImpl implements CardService {
         .map(request -> cardMapper.toEntity(request, customerType.getType())) // Pasamos el tipo
         .flatMap(cardRepository::save)
         .map(cardMapper::toResponse))
-      .doOnSuccess(response -> log.debug("Credit card created with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error creating credit card: {}", error.getMessage()));
+      .doOnSuccess(response -> log.debug("Card created with ID: {}", response.getId()))
+      .doOnError(error -> log.error("Error creating card: {}", error.getMessage()));*/
+    return null;
   }
 
   @Override
   public Mono<CardResponse> updateCard(String id, CardUpdateRequest cardRequest) {
-    log.debug("Updating credit card with ID: {}", id);
+    log.debug("Updating card with ID: {}", id);
 
     return cardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
       .map(existing -> cardMapper.updateEntity(existing, cardRequest))
       .flatMap(cardRepository::save)
       .map(cardMapper::toResponse)
-      .doOnSuccess(response -> log.debug("Credit updated with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error updating credit {}: {}", id, error.getMessage()));
+      .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()))
+      .doOnError(error -> log.error("Error updating card {}: {}", id, error.getMessage()));
   }
 
   @Override
@@ -89,8 +96,8 @@ public class CardServiceImpl implements CardService {
     return cardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
       .flatMap(cardRepository::delete)
-      .doOnSuccess(unused -> log.debug("Credit card deleted"))
-      .doOnError(error -> log.error("Error deleting credit card {}: {}", id, error.getMessage()));
+      .doOnSuccess(unused -> log.debug("Card deleted"))
+      .doOnError(error -> log.error("Error deleting card {}: {}", id, error.getMessage()));
   }
 
   @Override

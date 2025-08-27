@@ -16,7 +16,7 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class CustomerClient {
 
-  private final WebClient webClient;
+  /*private final WebClient webClient;
 
   @Value("${services.customer.base-url}")
   private String customerServiceUrl;
@@ -43,5 +43,5 @@ public class CustomerClient {
         response.getType(), customerId))
       .doOnError(error -> log.error("Error fetching customer type: {}", error.getMessage()));
   }
-
+*/
 }

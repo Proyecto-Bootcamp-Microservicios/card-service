@@ -25,7 +25,7 @@ public class Card {
     regexp = "^\\d{16}$",
     message = "El número de tarjeta debe tener 16 dígitos"
   )  @Indexed(unique = true)
-  @Field("creditNumber")
+  @Field("cardNumber")
   private String cardNumber;
 
   @NotBlank(message = "El ID del cliente es obligatorio")
@@ -47,6 +47,11 @@ public class Card {
   @DecimalMin(value = "0.00", message = "El crédito disponible de la tarjeta no puede ser negativo")
   @Field("availableCredit")
   private BigDecimal availableCredit;
+
+  @NotNull(message = "El crédito consumido de la tarjeta es obligatorio")
+  @DecimalMin(value = "0.00", message = "El crédito consumido de la tarjeta no puede ser negativo")
+  @Field("currentBalance")
+  private BigDecimal currentBalance;
 
   @NotNull(message = "El estado de la tarjeta es obligatorio")
   @Field("isActive")
