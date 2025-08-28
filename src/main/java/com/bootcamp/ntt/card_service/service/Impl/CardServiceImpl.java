@@ -1,14 +1,12 @@
 package com.bootcamp.ntt.card_service.service.Impl;
 
 import com.bootcamp.ntt.card_service.client.CustomerClient;
+import com.bootcamp.ntt.card_service.entity.Card;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.mapper.CardMapper;
-import com.bootcamp.ntt.card_service.model.CreditReservationRequest;
+import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.repository.CardRepository;
 import com.bootcamp.ntt.card_service.service.CardService;
-import com.bootcamp.ntt.card_service.model.CardCreateRequest;
-import com.bootcamp.ntt.card_service.model.CardResponse;
-import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -20,6 +18,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 
 
 @Slf4j
@@ -129,32 +129,74 @@ public class CardServiceImpl implements CardService {
       .doOnError(e -> log.error("Error activating card {}: {}", id, e.getMessage()));
   }
 
-
   @Override
-  public Mono<CardResponse> reserveCredit(String id, CreditReservationRequest creditReservationRequest ) {
-    log.debug("Applying transaction of {} to card {}", creditReservationRequest.getAmount(), id);
+  public Mono<ChargeAuthorizationResponse> authorizeCharge(String cardId, ChargeAuthorizationRequest request) {
+    return cardRepository.findById(cardId)
+      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardId)))
+      .flatMap(creditCard -> validateAndProcessCharge(creditCard, request.getAmount()));
+  }
 
-    BigDecimal amount = BigDecimal.valueOf(creditReservationRequest.getAmount());
+  private Mono<ChargeAuthorizationResponse> validateAndProcessCharge(Card card, Double amount) {
 
-    return cardRepository.findById(id)
-      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + id)))
-      .flatMap(card -> {
-        if (card.getAvailableCredit().compareTo(amount) < 0) {
-          return Mono.error(new BusinessRuleException(
-            "INSUFFICIENT_CREDIT",
-            "Transaction amount exceeds available credit"
-          ));
-        }
+    Double availableCredit = card.getAvailableCredit().doubleValue();
 
-        // Actualizar campos
-        card.setAvailableCredit(card.getAvailableCredit().subtract(amount));
-        card.setCurrentBalance(card.getCurrentBalance().add(amount));
+    // 1. Validar estado de la tarjeta
+    if (!card.isActive()) {
+      return Mono.just(createDeclinedResponse(availableCredit, "CARD_BLOCKED"));
+    }
 
-        return cardRepository.save(card);
+    // 2. Validar monto
+    if (amount <= 0) {
+      return Mono.just(createDeclinedResponse(availableCredit, "INVALID_AMOUNT"));
+    }
+
+    // 3. Validar crédito disponible
+    if (card.getAvailableCredit().doubleValue() < amount) {
+      return Mono.just(createDeclinedResponse(availableCredit, "INSUFFICIENT_CREDIT"));
+    }
+
+    // 4. Procesar cargo - APPROVED
+    Double newAvailableCredit = availableCredit - amount;
+    card.setAvailableCredit(BigDecimal.valueOf(newAvailableCredit));
+    card.setCurrentBalance(card.getCurrentBalance().add(BigDecimal.valueOf(amount)));
+
+    return cardRepository.save(card)
+      .map(savedCard -> {
+        ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
+        response.setAuthorizationCode(generateAuthCode());
+        response.setStatus(ChargeAuthorizationResponse.StatusEnum.APPROVED);
+        response.setAuthorizedAmount(amount);
+        response.setAvailableCreditAfter(savedCard.getAvailableCredit().doubleValue());
+        response.setProcessedAt(OffsetDateTime.now());
+        return response;
       })
-      .map(cardMapper::toResponse)
-      .doOnSuccess(c -> log.debug("Transaction applied successfully to card {}", id))
-      .doOnError(e -> log.error("Error applying transaction to card {}: {}", id, e.getMessage()));
+      .doOnSuccess(response -> log.info("Cargo autorizado: cardId={}, authCode={}, newCredit={}",
+        card.getId(), response.getAuthorizationCode(), newAvailableCredit));
+  }
+
+  private ChargeAuthorizationResponse createDeclinedResponse(Double availableCredit, String reason) {
+    ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
+    response.setAuthorizationCode(null);
+    response.setStatus(ChargeAuthorizationResponse.StatusEnum.DECLINED);
+    response.setAuthorizedAmount(0.0);
+    response.setAvailableCreditAfter(availableCredit);
+    response.setProcessedAt(OffsetDateTime.now());
+    switch (reason) {
+      case "INSUFFICIENT_CREDIT":
+        response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.INSUFFICIENT_CREDIT);
+        break;
+      case "CARD_INACTIVE":
+        response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.CARD_INACTIVE);
+        break;
+      case "INVALID_AMOUNT":
+        response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.INVALID_AMOUNT);
+        break;
+    }
+    return response;
+  }
+
+  private String generateAuthCode() {
+    return "AUTH-" + System.currentTimeMillis();
   }
 
   //Validaciones

@@ -1,9 +1,6 @@
 package com.bootcamp.ntt.card_service.service;
 
-import com.bootcamp.ntt.card_service.model.CardCreateRequest;
-import com.bootcamp.ntt.card_service.model.CardResponse;
-import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
-import com.bootcamp.ntt.card_service.model.CreditReservationRequest;
+import com.bootcamp.ntt.card_service.model.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -31,7 +28,7 @@ public interface CardService {
 
   Mono<CardResponse> activateCard(String id);
 
-  Mono<CardResponse> reserveCredit(String cardId, CreditReservationRequest request);
+  Mono<ChargeAuthorizationResponse> authorizeCharge(String cardId, ChargeAuthorizationRequest request);
 
   //Flux<CardResponse> getActiveCards(Boolean isActive);
 }

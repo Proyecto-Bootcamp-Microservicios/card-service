@@ -1,11 +1,8 @@
 package com.bootcamp.ntt.card_service.delegate;
 
-import com.bootcamp.ntt.card_service.model.CreditReservationRequest;
+import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.CardService;
 import com.bootcamp.ntt.card_service.api.CardsApiDelegate;
-import com.bootcamp.ntt.card_service.model.CardCreateRequest;
-import com.bootcamp.ntt.card_service.model.CardResponse;
-import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -206,6 +203,28 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
       }))
       .doOnError(error -> log.error("Error activating card {}: {}", id, error.getMessage()))
       .onErrorResume(this::handleError);
+  }
+
+  @Override
+  public Mono<ResponseEntity<ChargeAuthorizationResponse>> authorizeCharge(
+    String cardId,
+    Mono<ChargeAuthorizationRequest> chargeAuthorizationRequest,
+    ServerWebExchange exchange) {
+
+    log.info("Authorizing charge for card ID: {}", cardId);
+
+    return chargeAuthorizationRequest
+      .doOnNext(request -> log.info("Charge authorization request: cardId={}, amount={}",
+        cardId, request.getAmount()))
+      .flatMap(request -> cardService.authorizeCharge(cardId, request))
+      .map(response -> {
+        log.info("Charge authorization processed: cardId={}, status={}, authCode={}",
+          cardId, response.getStatus(), response.getAuthorizationCode());
+        return ResponseEntity.ok(response);
+      })
+      .doOnError(error -> log.error("Error authorizing charge for card {}: {}",
+        cardId, error.getMessage(), error))
+      .onErrorResume(error -> handleError(error));
   }
 
   /**

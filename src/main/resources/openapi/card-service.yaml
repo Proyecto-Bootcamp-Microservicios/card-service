@@ -204,11 +204,11 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /cards/{id}/reserve:
+  /cards/{id}/authorize-charge:
     patch:
-      summary: Reserve credit for a transaction
-      description: Decreases the availableCredit and increases the currentBalance if enough credit is available
-      operationId: reserveCredit
+      summary: Authorize credit card charge
+      description: Decreases the availableCredit and increases the currentBalance if enough credit is available.
+      operationId: authorizeCharge
       parameters:
         - name: id
           in: path
@@ -220,7 +220,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreditReservationRequest'
+              $ref: '#/components/schemas/ChargeAuthorizationRequest'
       responses:
         '200':
           description: Credit reserved successfully
@@ -266,7 +266,7 @@ components:
         currentBalance:
           type: number
           format: double
-          example: 4000
+          example: 2000
       required:
         - cardNumber
         - customerId
@@ -297,16 +297,55 @@ components:
         - currentBalance
         - isActive
 
-    CreditReservationRequest:
+    ChargeAuthorizationRequest:
       type: object
+      required:
+        - amount
       properties:
         amount:
           type: number
           format: double
-          example: 150.75
-      required:
-        - amount
+          minimum: 0.01
+          description: Amount to authorize
+          example: 150.00
 
+    ChargeAuthorizationResponse:
+      type: object
+      required:
+        - status
+        - authorizedAmount
+        - availableCreditAfter
+        - processedAt
+      properties:
+        authorizationCode:
+          type: string
+          description: Authorization code (null if it was rejected)
+          example: "AUTH-456789"
+        status:
+          type: string
+          enum: [ APPROVED, DECLINED ]
+          description: Authorization status
+          example: "APPROVED"
+        authorizedAmount:
+          type: number
+          format: double
+          description: Authorized amount (0 if it was rejected)
+          example: 150.00
+        availableCreditAfter:
+          type: number
+          format: double
+          description: Available credit after the transaction
+          example: 850.00
+        processedAt:
+          type: string
+          format: date-time
+          description: Processing Timestamp
+          example: "2025-08-28T10:30:05Z"
+        declineReason:
+          type: string
+          enum: [ INSUFFICIENT_CREDIT, CARD_INACTIVE, INVALID_AMOUNT ]
+          description: Reject reason (only if status = DECLINED)
+          example: "INSUFFICIENT_CREDIT"
 
     CardResponse:
       type: object
