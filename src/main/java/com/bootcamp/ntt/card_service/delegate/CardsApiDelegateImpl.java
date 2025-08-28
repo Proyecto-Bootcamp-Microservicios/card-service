@@ -1,5 +1,6 @@
 package com.bootcamp.ntt.card_service.delegate;
 
+import com.bootcamp.ntt.card_service.model.CreditReservationRequest;
 import com.bootcamp.ntt.card_service.service.CardService;
 import com.bootcamp.ntt.card_service.api.CardsApiDelegate;
 import com.bootcamp.ntt.card_service.model.CardCreateRequest;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.springframework.web.server.ServerWebExchange;
+
+import java.math.BigDecimal;
 
 @Slf4j
 @Component

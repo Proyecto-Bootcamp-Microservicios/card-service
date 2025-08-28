@@ -204,7 +204,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
+  /cards/{id}/reserve:
+    patch:
+      summary: Reserve credit for a transaction
+      description: Decreases the availableCredit and increases the currentBalance if enough credit is available
+      operationId: reserveCredit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreditReservationRequest'
+      responses:
+        '200':
+          description: Credit reserved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardResponse'
+        '400':
+          description: Insufficient credit or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     CardCreateRequest:
@@ -261,6 +296,17 @@ components:
         - availableCredit
         - currentBalance
         - isActive
+
+    CreditReservationRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: double
+          example: 150.75
+      required:
+        - amount
+
 
     CardResponse:
       type: object

@@ -3,6 +3,7 @@ package com.bootcamp.ntt.card_service.service.Impl;
 import com.bootcamp.ntt.card_service.client.CustomerClient;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.mapper.CardMapper;
+import com.bootcamp.ntt.card_service.model.CreditReservationRequest;
 import com.bootcamp.ntt.card_service.repository.CardRepository;
 import com.bootcamp.ntt.card_service.service.CardService;
 import com.bootcamp.ntt.card_service.model.CardCreateRequest;
@@ -17,6 +18,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.math.BigDecimal;
 
 
 @Slf4j
@@ -124,6 +127,34 @@ public class CardServiceImpl implements CardService {
       .map(cardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} activated", id))
       .doOnError(e -> log.error("Error activating card {}: {}", id, e.getMessage()));
+  }
+
+
+  @Override
+  public Mono<CardResponse> reserveCredit(String id, CreditReservationRequest creditReservationRequest ) {
+    log.debug("Applying transaction of {} to card {}", creditReservationRequest.getAmount(), id);
+
+    BigDecimal amount = BigDecimal.valueOf(creditReservationRequest.getAmount());
+
+    return cardRepository.findById(id)
+      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + id)))
+      .flatMap(card -> {
+        if (card.getAvailableCredit().compareTo(amount) < 0) {
+          return Mono.error(new BusinessRuleException(
+            "INSUFFICIENT_CREDIT",
+            "Transaction amount exceeds available credit"
+          ));
+        }
+
+        // Actualizar campos
+        card.setAvailableCredit(card.getAvailableCredit().subtract(amount));
+        card.setCurrentBalance(card.getCurrentBalance().add(amount));
+
+        return cardRepository.save(card);
+      })
+      .map(cardMapper::toResponse)
+      .doOnSuccess(c -> log.debug("Transaction applied successfully to card {}", id))
+      .doOnError(e -> log.error("Error applying transaction to card {}: {}", id, e.getMessage()));
   }
 
   //Validaciones
