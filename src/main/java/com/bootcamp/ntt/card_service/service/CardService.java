@@ -28,7 +28,9 @@ public interface CardService {
 
   Mono<CardResponse> activateCard(String id);
 
-  Mono<ChargeAuthorizationResponse> authorizeCharge(String cardId, ChargeAuthorizationRequest request);
+  Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request);
+
+  Mono<ChargeAuthorizationResponse> createInvalidAmountResponse();
 
   //Flux<CardResponse> getActiveCards(Boolean isActive);
 }

@@ -204,13 +204,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /cards/{id}/authorize-charge:
+  /cards/{cardNumber}/authorize-charge:
     patch:
       summary: Authorize credit card charge
       description: Decreases the availableCredit and increases the currentBalance if enough credit is available.
       operationId: authorizeCharge
       parameters:
-        - name: id
+        - name: cardNumber
           in: path
           required: true
           schema:
@@ -227,7 +227,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/ChargeAuthorizationResponse'
         '400':
           description: Insufficient credit or invalid request
           content:

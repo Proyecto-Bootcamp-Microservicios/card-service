@@ -49,7 +49,7 @@ public class CardServiceImpl implements CardService {
   public Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId) {
     return cardRepository.findByIsActiveAndCustomerId(isActive, customerId)
       .map(cardMapper::toResponse)
-      .doOnComplete(() -> log.debug("Cards active by customer retrieved "));
+      .doOnComplete(() -> log.debug("Cards active by customer retrieved"));
   }
 
   @Override
@@ -130,9 +130,9 @@ public class CardServiceImpl implements CardService {
   }
 
   @Override
-  public Mono<ChargeAuthorizationResponse> authorizeCharge(String cardId, ChargeAuthorizationRequest request) {
-    return cardRepository.findById(cardId)
-      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardId)))
+  public Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request) {
+    return cardRepository.findByCardNumber(cardNumber)
+      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
       .flatMap(creditCard -> validateAndProcessCharge(creditCard, request.getAmount()));
   }
 
@@ -142,7 +142,7 @@ public class CardServiceImpl implements CardService {
 
     // 1. Validar estado de la tarjeta
     if (!card.isActive()) {
-      return Mono.just(createDeclinedResponse(availableCredit, "CARD_BLOCKED"));
+      return Mono.just(createDeclinedResponse(availableCredit, "CARD_INACTIVE"));
     }
 
     // 2. Validar monto
@@ -156,7 +156,7 @@ public class CardServiceImpl implements CardService {
     }
 
     // 4. Procesar cargo - APPROVED
-    Double newAvailableCredit = availableCredit - amount;
+    double newAvailableCredit = availableCredit - amount;
     card.setAvailableCredit(BigDecimal.valueOf(newAvailableCredit));
     card.setCurrentBalance(card.getCurrentBalance().add(BigDecimal.valueOf(amount)));
 
@@ -193,6 +193,18 @@ public class CardServiceImpl implements CardService {
         break;
     }
     return response;
+  }
+
+  @Override
+  public Mono<ChargeAuthorizationResponse> createInvalidAmountResponse() {
+    ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
+    response.setAuthorizationCode(null);
+    response.setStatus(ChargeAuthorizationResponse.StatusEnum.DECLINED);
+    response.setAuthorizedAmount(0.0);
+    response.setAvailableCreditAfter(0.0);
+    response.setProcessedAt(OffsetDateTime.now());
+    response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.INVALID_AMOUNT);
+    return Mono.just(response);
   }
 
   private String generateAuthCode() {

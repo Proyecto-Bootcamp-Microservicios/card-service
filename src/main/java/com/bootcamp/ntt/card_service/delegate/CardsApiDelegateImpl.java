@@ -5,14 +5,18 @@ import com.bootcamp.ntt.card_service.service.CardService;
 import com.bootcamp.ntt.card_service.api.CardsApiDelegate;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.codec.DecodingException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.support.WebExchangeBindException;
+import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import org.springframework.web.server.ServerWebExchange;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 @Slf4j
 @Component
@@ -129,7 +133,7 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
 
     return cardRequest
       .doOnNext(request -> log.info("Update request for card ID: {}", id))
-      .flatMap(request -> cardService.updateCard(id, request))  // ✅ Método del service
+      .flatMap(request -> cardService.updateCard(id, request))
       .map(response -> {
         log.info("Card updated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
@@ -153,15 +157,15 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
     log.info("Deleting credit with ID: {}", id);
 
     return cardService
-      .deleteCard(id)  // Retorna Mono<Void>
-      .then(Mono.just(ResponseEntity.noContent().<Void>build()))  // ✅ Tipo explícito aquí
+      .deleteCard(id)
+      .then(Mono.just(ResponseEntity.noContent().<Void>build()))
       .doOnSuccess(response -> log.info("Card deleted successfully: {}", id))
       .onErrorResume(error -> {
         log.error("Error deleting card {}: {}", id, error.getMessage(), error);
         if (isNotFoundError(error)) {
-          return Mono.just(ResponseEntity.notFound().build());  // ✅ Y aquí
+          return Mono.just(ResponseEntity.notFound().build());
         }
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());  // ✅ Y aquí
+        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
       });
   }
 
@@ -207,30 +211,59 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
 
   @Override
   public Mono<ResponseEntity<ChargeAuthorizationResponse>> authorizeCharge(
-    String cardId,
+    String cardNumber,
     Mono<ChargeAuthorizationRequest> chargeAuthorizationRequest,
     ServerWebExchange exchange) {
 
-    log.info("Authorizing charge for card ID: {}", cardId);
+    log.info("Authorizing charge for card ID: {}", cardNumber);
 
-    return chargeAuthorizationRequest
-      .doOnNext(request -> log.info("Charge authorization request: cardId={}, amount={}",
-        cardId, request.getAmount()))
-      .flatMap(request -> cardService.authorizeCharge(cardId, request))
-      .map(response -> {
-        log.info("Charge authorization processed: cardId={}, status={}, authCode={}",
-          cardId, response.getStatus(), response.getAuthorizationCode());
-        return ResponseEntity.ok(response);
-      })
+    log.info("Authorizing charge for card ID: {}", cardNumber);
+
+    Mono<ChargeAuthorizationResponse> responseMono = chargeAuthorizationRequest
+      .flatMap(request -> cardService.authorizeCharge(cardNumber, request))
+      .onErrorResume(this::isInputValidationError, e -> {
+        log.debug("Input validation error: {}", e.getMessage());
+        return cardService.createInvalidAmountResponse();
+      });
+
+    return responseMono
+      .map(ResponseEntity::ok)
       .doOnError(error -> log.error("Error authorizing charge for card {}: {}",
-        cardId, error.getMessage(), error))
-      .onErrorResume(error -> handleError(error));
+        cardNumber, error.getMessage(), error))
+      .onErrorResume(this::handleErrorAuthorization);
   }
+
+  private boolean isInputValidationError(Throwable error) {
+    return error instanceof ServerWebInputException ||
+      error instanceof DecodingException ||
+      (error.getMessage() != null &&
+        (error.getMessage().contains("validation") ||
+          error.getMessage().contains("decode") ||
+          error.getMessage().contains("format")));
+  }
+
 
   /**
    * Manejo centralizado de errores para operaciones que retornan CardResponse
    */
   private Mono<ResponseEntity<CardResponse>> handleError(Throwable error) {
+    log.error("Handling error: {}", error.getMessage(), error);
+
+    if (isNotFoundError(error)) {
+      return Mono.just(ResponseEntity.notFound().build());
+    }
+
+    if (isValidationError(error)) {
+      return Mono.just(ResponseEntity.badRequest().build());
+    }
+
+    return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
+  }
+
+  /**
+   * Manejo centralizado de errores para operaciones que retornan ChargeAuthorizationResponse
+   */
+  private Mono<ResponseEntity<ChargeAuthorizationResponse>> handleErrorAuthorization(Throwable error) {
     log.error("Handling error: {}", error.getMessage(), error);
 
     if (isNotFoundError(error)) {
