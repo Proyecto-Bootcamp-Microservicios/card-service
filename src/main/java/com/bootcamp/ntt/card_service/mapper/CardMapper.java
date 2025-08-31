@@ -13,13 +13,13 @@ import java.time.ZoneOffset;
 @Component
 public class CardMapper {
 
-  public Card toEntity(CardCreateRequest dto, String customerType) {
+  public Card toEntity(CardCreateRequest dto, String customerType, String cardNumber) {
     if (dto == null) {
       return null;
     }
 
     Card card = new Card();
-    card.setCardNumber(dto.getCardNumber());
+    card.setCardNumber(cardNumber);
     card.setCustomerId(dto.getCustomerId());
     card.setType(CardType.valueOf(customerType));
     card.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));

@@ -17,7 +17,6 @@ public interface CardService {
 
   Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId);
 
-
   Mono<CardResponse> createCard(CardCreateRequest cardRequest);
 
   Mono<CardResponse> updateCard(String id, CardUpdateRequest cardRequest);
@@ -30,7 +29,11 @@ public interface CardService {
 
   Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request);
 
-  Mono<ChargeAuthorizationResponse> createInvalidAmountResponse();
+  Mono<String> generateUniqueCardNumber();
+
+  Mono<PaymentProcessResponse> processPayment(String cardNumber, PaymentProcessRequest paymentRequest);
+
+  Mono<CardBalanceResponse> getCardBalance(String cardNumber);
 
   //Flux<CardResponse> getActiveCards(Boolean isActive);
 }

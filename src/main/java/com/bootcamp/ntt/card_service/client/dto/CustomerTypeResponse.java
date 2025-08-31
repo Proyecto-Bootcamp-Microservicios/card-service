@@ -5,9 +5,9 @@ import lombok.Data;
 
 @Data
 public class CustomerTypeResponse {
-  @JsonProperty("customerId")
-  private String customerId;
+  @JsonProperty("id")
+  private String id;
 
-  @JsonProperty("type")
-  private String type; // "PERSONAL" o "ENTERPRISE"
+  @JsonProperty("customerType")
+  private String customerType; // "PERSONAL" o "ENTERPRISE"
 }

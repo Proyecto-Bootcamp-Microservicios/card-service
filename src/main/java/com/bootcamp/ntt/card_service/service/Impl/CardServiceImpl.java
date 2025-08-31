@@ -18,6 +18,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 
@@ -30,6 +31,8 @@ public class CardServiceImpl implements CardService {
   private final CardRepository cardRepository;
   private final CardMapper cardMapper;
   private final CustomerClient customerClient;
+  private static final SecureRandom random = new SecureRandom();
+
 
   @Override
   public Flux<CardResponse> getAllCards(Boolean isActive) {
@@ -68,17 +71,17 @@ public class CardServiceImpl implements CardService {
 
   @Override
   public Mono<CardResponse> createCard(CardCreateRequest cardRequest) {
-    /*log.debug("Creating card for customer: {}", cardRequest.getCustomerId());
+    log.debug("Creating card for customer: {}", cardRequest.getCustomerId());
 
     return customerClient.getCustomerType(cardRequest.getCustomerId())
-      .flatMap(customerType -> validateCreditCreation(cardRequest.getCustomerId(), customerType.getType())
-        .then(Mono.just(cardRequest))
-        .map(request -> cardMapper.toEntity(request, customerType.getType())) // Pasamos el tipo
+      .flatMap(customerType -> validateCreditCreation(cardRequest.getCustomerId(), customerType.getCustomerType())
+        //.then(Mono.just(cardRequest))
+        .then(generateUniqueCardNumber())
+        .map(cardNumber -> cardMapper.toEntity(cardRequest, customerType.getCustomerType(),cardNumber)) // Pasamos el tipo
         .flatMap(cardRepository::save)
         .map(cardMapper::toResponse))
       .doOnSuccess(response -> log.debug("Card created with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error creating card: {}", error.getMessage()));*/
-    return null;
+      .doOnError(error -> log.error("Error creating card: {}", error.getMessage()));
   }
 
   @Override
@@ -188,27 +191,56 @@ public class CardServiceImpl implements CardService {
       case "CARD_INACTIVE":
         response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.CARD_INACTIVE);
         break;
-      case "INVALID_AMOUNT":
-        response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.INVALID_AMOUNT);
-        break;
     }
     return response;
   }
 
-  @Override
-  public Mono<ChargeAuthorizationResponse> createInvalidAmountResponse() {
-    ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
-    response.setAuthorizationCode(null);
-    response.setStatus(ChargeAuthorizationResponse.StatusEnum.DECLINED);
-    response.setAuthorizedAmount(0.0);
-    response.setAvailableCreditAfter(0.0);
-    response.setProcessedAt(OffsetDateTime.now());
-    response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.INVALID_AMOUNT);
-    return Mono.just(response);
-  }
-
   private String generateAuthCode() {
     return "AUTH-" + System.currentTimeMillis();
+  }
+
+  @Override
+  public Mono<String> generateUniqueCardNumber() {
+    String candidate = generateRandomCardNumber();
+
+    return cardRepository.findByCardNumber(candidate)
+      .flatMap(existing -> generateUniqueCardNumber()) // si existe, intenta de nuevo
+      .switchIfEmpty(Mono.just(candidate)); // si no existe, úsalo
+  }
+
+  private String generateRandomCardNumber() {
+    StringBuilder sb = new StringBuilder();
+    for (int i = 0; i < 16; i++) {
+      sb.append(random.nextInt(10));
+    }
+    return sb.toString();
+  }
+
+  @Override
+  public Mono<PaymentProcessResponse> processPayment(String cardNumber, PaymentProcessRequest paymentRequest) {
+    log.debug("Processing payment for card: {}, amount: {}", cardNumber, paymentRequest.getAmount());
+    return cardRepository.findByCardNumber(cardNumber)
+      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
+      .flatMap(card -> validateAndProcessPayment(card, paymentRequest))
+      .doOnSuccess(response -> {
+        if (response.getSuccess()) {
+          log.info("Payment processed successfully for card {}: paid {}",
+            cardNumber, response.getActualPaymentAmount());
+        } else {
+          log.warn("Payment failed for card {}: {}", cardNumber, response.getErrorMessage());
+        }
+      })
+      .doOnError(error -> log.error("Error processing payment for card {}: {}", cardNumber, error.getMessage()));
+  }
+  @Override
+  public Mono<CardBalanceResponse> getCardBalance(String cardNumber) {
+    log.debug("Getting balance for card: {}", cardNumber);
+
+    return cardRepository.findByCardNumber(cardNumber)
+      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
+      .map(this::buildBalanceResponse)
+      .doOnSuccess(response -> log.debug("Balance retrieved for card: {}", cardNumber))
+      .doOnError(error -> log.error("Error getting balance for card {}: {}", cardNumber, error.getMessage()));
   }
 
   //Validaciones
@@ -237,5 +269,88 @@ public class CardServiceImpl implements CardService {
   private Mono<Void> validateEnterpriseCreditCardRules(/*String customerId*/) {
     // Para empresariales no hay límite
     return Mono.empty();
+  }
+
+  private Mono<PaymentProcessResponse> validateAndProcessPayment(Card card, PaymentProcessRequest request) {
+    BigDecimal paymentAmount = BigDecimal.valueOf(request.getAmount());
+    // Validar estado de la tarjeta
+    if (!card.isActive()) {
+      return Mono.just(createPaymentFailedResponse(card.getId(), paymentAmount,
+        PaymentProcessResponse.ErrorCodeEnum.CARD_INACTIVE, "Card is not active"));
+    }
+
+    // Validar monto
+    if (paymentAmount.compareTo(BigDecimal.ZERO) <= 0) {
+      return Mono.just(createPaymentFailedResponse(card.getId(), paymentAmount,
+        PaymentProcessResponse.ErrorCodeEnum.INVALID_AMOUNT, "Payment amount must be greater than 0"));
+    }
+
+    //  Validar balance cero
+    if (card.getCurrentBalance().compareTo(BigDecimal.ZERO) == 0) {
+      return Mono.just(createPaymentFailedResponse(card.getId(), paymentAmount,
+        PaymentProcessResponse.ErrorCodeEnum.ZERO_CURRENT_BALANCE, "Card has no outstanding balance"));
+    }
+
+    // Determinar monto real a pagar
+    BigDecimal actualPaymentAmount = calculateActualPaymentAmount(card, paymentAmount);
+
+    // Calcular nuevos saldos
+    BigDecimal newCurrentBalance = card.getCurrentBalance().subtract(actualPaymentAmount);
+    BigDecimal newAvailableCredit = card.getAvailableCredit().add(actualPaymentAmount);
+
+    // Actualizar la tarjeta
+    card.setCurrentBalance(newCurrentBalance);
+    card.setAvailableCredit(newAvailableCredit);
+
+    return cardRepository.save(card)
+      .map(savedCard -> createPaymentSuccessResponse(savedCard, paymentAmount, actualPaymentAmount));
+  }
+  private BigDecimal calculateActualPaymentAmount(Card card, BigDecimal requestedAmount) {
+    // Si el pago es mayor al balance, se paga solo lo que se debe
+    if (requestedAmount.compareTo(card.getCurrentBalance()) > 0) {
+      log.info("Payment amount {} exceeds balance {}, adjusting to full balance",
+        requestedAmount, card.getCurrentBalance());
+      return card.getCurrentBalance();
+    }
+    return requestedAmount;
+  }
+  private PaymentProcessResponse createPaymentSuccessResponse(Card card, BigDecimal requestedAmount, BigDecimal actualAmount) {
+    PaymentProcessResponse response = new PaymentProcessResponse();
+    response.setSuccess(true);
+    response.setCardId(card.getId());
+    response.setRequestedAmount(requestedAmount.doubleValue());
+    response.setActualPaymentAmount(actualAmount.doubleValue());
+    response.setAvailableCreditAfter(card.getAvailableCredit().doubleValue());
+    response.setCurrentBalanceAfter(card.getCurrentBalance().doubleValue());
+    response.setProcessedAt(OffsetDateTime.now());
+    return response;
+  }
+  private PaymentProcessResponse createPaymentFailedResponse(String cardId, BigDecimal requestedAmount,
+                                                             PaymentProcessResponse.ErrorCodeEnum errorCode, String errorMessage) {
+    PaymentProcessResponse response = new PaymentProcessResponse();
+    response.setSuccess(false);
+    response.setCardId(cardId);
+    response.setRequestedAmount(requestedAmount.doubleValue());
+    response.setErrorCode(errorCode);
+    response.setErrorMessage(errorMessage);
+    response.setProcessedAt(OffsetDateTime.now());
+    return response;
+  }
+  private CardBalanceResponse buildBalanceResponse(Card card) {
+    // Calcular porcentaje de utilización
+    BigDecimal utilizationPercentage = card.getCreditLimit().compareTo(BigDecimal.ZERO) > 0
+      ? card.getCurrentBalance()
+      .multiply(BigDecimal.valueOf(100))
+      .divide(card.getCreditLimit(), 2, java.math.RoundingMode.HALF_UP)
+      : BigDecimal.ZERO;
+    CardBalanceResponse response = new CardBalanceResponse();
+    response.setCardId(card.getId());
+    response.setCardNumber(card.getCardNumber());
+    response.setCreditLimit(card.getCreditLimit().doubleValue());
+    response.setAvailableCredit(card.getAvailableCredit().doubleValue());
+    response.setCurrentBalance(card.getCurrentBalance().doubleValue());
+    response.setUtilizationPercentage(utilizationPercentage.doubleValue());
+    response.setIsActive(card.isActive());
+    return response;
   }
 }

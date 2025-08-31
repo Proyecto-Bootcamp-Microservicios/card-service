@@ -240,14 +240,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /cards/{cardNumber}/process-payment:
+    post:
+      summary: Process payment validation and update balances
+      description: Validates payment and updates card balances if successful
+      operationId: processCardPayment
+      parameters:
+        - name: cardNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentProcessRequest'
+      responses:
+        '200':
+          description: Payment processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentProcessResponse'
+        '400':
+          description: Payment validation failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentProcessResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /cards/{cardNumber}/balance:
+    get:
+      summary: Get credit card balance information
+      operationId: getCardBalance
+      parameters:
+        - name: cardNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Card balance information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardBalanceResponse'
+        '404':
+          description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     CardCreateRequest:
       type: object
       properties:
-        cardNumber:
-          type: string
-          example: "1234-5678-9123-4567"
         customerId:
           type: string
           example: "68a0cdde7d68c910da0bc239"
@@ -255,10 +312,6 @@ components:
           type: number
           format: double
           example: 10000.00
-        type:
-          type: string
-          enum: ["PERSONAL", "ENTERPRISE"]
-          example: "PERSONAL"
         availableCredit:
           type: number
           format: double
@@ -268,10 +321,8 @@ components:
           format: double
           example: 2000
       required:
-        - cardNumber
         - customerId
         - creditLimit
-        - type
 
     CardUpdateRequest:
       type: object
@@ -309,6 +360,68 @@ components:
           description: Amount to authorize
           example: 150.00
 
+    PaymentProcessRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Payment amount
+          example: 500.00
+
+    PaymentProcessResponse:
+      type: object
+      required:
+        - success
+        - cardId
+        - requestedAmount
+        - processedAt
+      properties:
+        success:
+          type: boolean
+          description: Whether the payment was successful
+          example: true
+        cardId:
+          type: string
+          description: Card ID
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        requestedAmount:
+          type: number
+          format: double
+          description: Requested payment amount
+          example: 500.00
+        actualPaymentAmount:
+          type: number
+          format: double
+          description: Actual amount paid (only if success = true)
+          example: 500.00
+        availableCreditAfter:
+          type: number
+          format: double
+          description: Available credit after payment (only if success = true)
+          example: 9500.00
+        currentBalanceAfter:
+          type: number
+          format: double
+          description: Current balance after payment (only if success = true)
+          example: 500.00
+        errorCode:
+          type: string
+          enum: [ CARD_INACTIVE, INVALID_AMOUNT, OVERPAYMENT_NOT_ALLOWED, ZERO_CURRENT_BALANCE ]
+          description: Error code (only if success = false)
+          example: "OVERPAYMENT_NOT_ALLOWED"
+        errorMessage:
+          type: string
+          description: Error message (only if success = false)
+          example: "Payment amount exceeds current balance"
+        processedAt:
+          type: string
+          format: date-time
+          description: Processing timestamp
+          example: "2025-08-30T15:30:00Z"
     ChargeAuthorizationResponse:
       type: object
       required:
@@ -343,7 +456,7 @@ components:
           example: "2025-08-28T10:30:05Z"
         declineReason:
           type: string
-          enum: [ INSUFFICIENT_CREDIT, CARD_INACTIVE, INVALID_AMOUNT ]
+          enum: [ INSUFFICIENT_CREDIT, CARD_INACTIVE]
           description: Reject reason (only if status = DECLINED)
           example: "INSUFFICIENT_CREDIT"
 
@@ -361,7 +474,7 @@ components:
           example: "68a0cdde7d68c910da0bc239"
         type:
           type: string
-          enum: ["PERSONAL", "ENTERPRISE"]
+          enum: [ "PERSONAL", "ENTERPRISE" ]
           example: "PERSONAL"
         creditLimit:
           type: number
@@ -386,6 +499,48 @@ components:
           type: string
           format: date-time
           example: 2025-08-18T10:15:30Z
+    CardBalanceResponse:
+      type: object
+      required:
+        - cardId
+        - cardNumber
+        - creditLimit
+        - availableCredit
+        - currentBalance
+        - utilizationPercentage
+      properties:
+        cardId:
+          type: string
+          description: Card ID
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        cardNumber:
+          type: string
+          description: Card number
+          example: "1234567891234567"
+        creditLimit:
+          type: number
+          format: double
+          description: Total credit limit
+          example: 10000.00
+        availableCredit:
+          type: number
+          format: double
+          description: Available credit
+          example: 6000.00
+        currentBalance:
+          type: number
+          format: double
+          description: Current balance (debt)
+          example: 4000.00
+        utilizationPercentage:
+          type: number
+          format: double
+          description: Credit utilization percentage
+          example: 40.00
+        isActive:
+          type: boolean
+          description: Card active status
+          example: true
 
     ErrorResponse:
       type: object

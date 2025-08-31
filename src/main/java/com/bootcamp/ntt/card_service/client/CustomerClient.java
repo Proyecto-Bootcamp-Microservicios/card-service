@@ -16,9 +16,10 @@ import reactor.core.publisher.Mono;
 @Slf4j
 public class CustomerClient {
 
-  /*private final WebClient webClient;
+  private final WebClient webClient;
 
-  @Value("${services.customer.base-url}")
+  //@Value("${services.customer.base-url}")
+  @Value("http://localhost:8080")
   private String customerServiceUrl;
 
   public Mono<CustomerTypeResponse> getCustomerType(String customerId) {
@@ -26,7 +27,7 @@ public class CustomerClient {
 
     return webClient
       .get()
-      .uri(customerServiceUrl + "/customers/{id}/type", customerId)
+      .uri(customerServiceUrl + "/customers/{id}", customerId)
       .retrieve()
       .onStatus(HttpStatus::is4xxClientError,
         response -> {
@@ -40,8 +41,8 @@ public class CustomerClient {
         })
       .bodyToMono(CustomerTypeResponse.class)
       .doOnSuccess(response -> log.debug("Customer type retrieved: {} for ID: {}",
-        response.getType(), customerId))
+        response.getCustomerType(), customerId))
       .doOnError(error -> log.error("Error fetching customer type: {}", error.getMessage()));
   }
-*/
+
 }
