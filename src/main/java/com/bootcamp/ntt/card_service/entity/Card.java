@@ -1,4 +1,7 @@
 package com.bootcamp.ntt.card_service.entity;
+import com.bootcamp.ntt.card_service.enums.CardType;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.CreatedDate;
@@ -8,14 +11,17 @@ import org.springframework.data.mongodb.core.mapping.Field;
 import org.springframework.data.mongodb.core.index.Indexed;
 
 import javax.validation.constraints.*;
-import java.math.BigDecimal;
 import java.time.Instant;
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 @Document(collection = "cards")
-public class Card {
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, property = "cardType")
+@JsonSubTypes({
+  @JsonSubTypes.Type(value = CreditCard.class, name = "CREDIT"),
+  @JsonSubTypes.Type(value = DebitCard.class, name = "DEBIT")
+})
+public abstract class Card {
 
   @Id
   private String id;
@@ -37,22 +43,6 @@ public class Card {
   @Field("type")
   private CardType type;
 
-  @NotNull(message = "El límite de crédito de la tarjera es obligatorio")
-  @DecimalMin(value = "0.01", message = "El límite de crédito de la tarjeta debe ser mayor a 0")
-  @Digits(integer = 12, fraction = 2, message = "El límite debe tener máximo 12 enteros y 2 decimales")
-  @Field("creditLimit")
-  private BigDecimal creditLimit;
-
-  @NotNull(message = "El crédito disponible de la tarjeta es obligatorio")
-  @DecimalMin(value = "0.00", message = "El crédito disponible de la tarjeta no puede ser negativo")
-  @Field("availableCredit")
-  private BigDecimal availableCredit;
-
-  @NotNull(message = "El crédito consumido de la tarjeta es obligatorio")
-  @DecimalMin(value = "0.00", message = "El crédito consumido de la tarjeta no puede ser negativo")
-  @Field("currentBalance")
-  private BigDecimal currentBalance;
-
   @NotNull(message = "El estado de la tarjeta es obligatorio")
   @Field("isActive")
   private boolean isActive;
@@ -65,4 +55,5 @@ public class Card {
   @Field("updatedAt")
   private Instant updatedAt;
 
+  public abstract CardType getCardType();
 }

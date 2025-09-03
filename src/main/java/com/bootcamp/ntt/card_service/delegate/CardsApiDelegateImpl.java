@@ -214,4 +214,49 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
       });
   }
 
+  /**
+   * GET /cards/customers/{customerId}/has-active-card : Check if customer has active card
+   */
+  @Override
+  public Mono<ResponseEntity<CustomerCardValidationResponse>> checkCustomerHasActiveCard(
+    String customerId,
+    ServerWebExchange exchange) {
+
+    log.info("Checking active cards for customer: {}", customerId);
+
+    return cardService
+      .getCustomerCardValidation(customerId)
+      .map(response -> {
+        log.info("Customer validation completed for {}: hasActiveCard={}, count={}",
+          customerId, response.getHasActiveCard(), response.getActiveCardCount());
+        return ResponseEntity.ok(response);
+      })
+      .doOnError(error -> log.error("Error validating customer {}: {}", customerId, error.getMessage()));
+  }
+
+  /**
+   * GET /cards/customers/{customerId}/daily-averages : Get customer daily averages
+   */
+  @Override
+  public Mono<ResponseEntity<CustomerDailyAverageResponse>> getCustomerDailyAverages(
+    String customerId,
+    Integer year,
+    Integer month,
+    ServerWebExchange exchange) {
+
+    log.info("Getting daily averages for customer: {} for {}/{}", customerId, month, year);
+
+    return cardService
+      .getCustomerDailyAverages(customerId, year, month)
+      .map(response -> {
+        log.info("Daily averages retrieved for customer {}: {} products found",
+          customerId, response.getProducts().size());
+        return ResponseEntity.ok(response);
+      })
+      .switchIfEmpty(Mono.fromCallable(() -> {
+        log.warn("No daily averages found for customer: {} for {}/{}", customerId, month, year);
+        return ResponseEntity.notFound().build();
+      }))
+      .doOnError(error -> log.error("Error getting daily averages for customer {}: {}", customerId, error.getMessage()));
+  }
 }

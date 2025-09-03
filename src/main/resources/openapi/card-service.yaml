@@ -2,13 +2,13 @@ openapi: 3.0.3
 info:
   title: Card Service API
   version: 1.0.0
-  description: API for managing credit cards (personal and enterprise)
+  description: API for managing debit & credit cards
 
 servers:
   - url: http://localhost:8081/api/v1
 
 paths:
-  /cards:
+  /credit-cards:
     get:
       summary: Get all credit cards
       operationId: getAllCreditCards
@@ -35,7 +35,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CardResponse'
+                  $ref: '#/components/schemas/CreditCardResponse'
     post:
       summary: Create a new credit card
       operationId: createCreditCard
@@ -44,14 +44,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CardCreateRequest'
+              $ref: '#/components/schemas/CreditCardCreateRequest'
       responses:
         '201':
           description: Credit card created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CreditCardResponse'
         '400':
           description: Bad request - Validation errors
           content:
@@ -78,7 +78,7 @@ paths:
                     message: "Customer with provided ID does not exist"
                     timestamp: "2025-08-24T10:15:30Z"
 
-  /cards/{id}:
+  /credit-cards/{id}:
     get:
       summary: Get a credit card by ID
       operationId: getCreditCardById
@@ -94,7 +94,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CreditCardResponse'
         '404':
           description: Credit card not found
           content:
@@ -115,14 +115,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CardUpdateRequest'
+              $ref: '#/components/schemas/CreditCardUpdateRequest'
       responses:
         '200':
           description: Credit card updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CreditCardResponse'
         '404':
           description: Credit card not found
           content:
@@ -155,7 +155,7 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
 
-  /cards/{id}/deactivate:
+  /credit-cards/{id}/deactivate:
     patch:
       summary: Soft delete (deactivate) a credit card by ID
       description: Marks the credit card as inactive without physically removing it
@@ -172,7 +172,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CreditCardResponse'
         '404':
           description: Credit card not found
           content:
@@ -180,7 +180,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /cards/{id}/activate:
+  /credit-cards/{id}/activate:
     patch:
       summary: Reactivate a credit card by ID
       description: Marks the credit card as active again
@@ -197,14 +197,41 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardResponse'
+                $ref: '#/components/schemas/CreditCardResponse'
         '404':
           description: Credit card not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /cards/{cardNumber}/authorize-charge:
+
+  /credit-cards/customers/{customerId}/has-active-card:
+    get:
+      summary: Check if customer has an active credit card
+      description: Validates if a customer has at least one active credit card for account eligibility requirements
+      operationId: checkCustomerHasActiveCard
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Customer ID to check for active credit cards
+          example: "68a0cdde7d68c910da0bc239"
+      responses:
+        '200':
+          description: Customer credit card validation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerCardValidationResponse'
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /credit-cards/{cardNumber}/authorize-charge:
     patch:
       summary: Authorize credit card charge
       description: Decreases the availableCredit and increases the currentBalance if enough credit is available.
@@ -240,7 +267,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /cards/{cardNumber}/process-payment:
+  /credit-cards/{cardNumber}/process-payment:
     post:
       summary: Process payment validation and update balances
       description: Validates payment and updates card balances if successful
@@ -277,7 +304,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /cards/{cardNumber}/balance:
+  /credit-cards/{cardNumber}/balance:
     get:
       summary: Get credit card balance information
       operationId: getCardBalance
@@ -293,16 +320,282 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CardBalanceResponse'
+                $ref: '#/components/schemas/CreditCardBalanceResponse'
         '404':
           description: Card not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+  /credit-cards/customers/{customerId}/daily-averages:
+    get:
+      summary: Get customer's credit cards daily average balances
+      operationId: getCustomerDailyAverages
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: year
+          in: query
+          required: true
+          schema:
+            type: integer
+          example: 2025
+        - name: month
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 12
+          example: 8
+      responses:
+        '200':
+          description: Daily balance average
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerDailyAverageResponse'
+  /debit-cards:
+    get:
+      summary: Get all debit cards
+      operationId: getAllDebitCards
+      parameters:
+        - name: customerId
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Filter debit cards by customer ID
+        - name: isActive
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: Filter debit cards by active status (default = true)
+      responses:
+        '200':
+          description: List of debit cards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DebitCardResponse'
+    post:
+      summary: Create a new debit card
+      operationId: createDebitCard
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebitCardCreateRequest'
+      responses:
+        '201':
+          description: Debit card created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '400':
+          description: Bad request - Validation errors
+        '409':
+          description: Business rule violation
+
+  /debit-cards/{id}:
+    get:
+      summary: Get a debit card by ID
+      operationId: getDebitCardById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Debit card found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '404':
+          description: Debit card not found
+    put:
+      summary: Update a debit card by ID
+      operationId: updateDebitCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebitCardUpdateRequest'
+      responses:
+        '200':
+          description: Debit card updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '404':
+          description: Debit card not found
+        '400':
+          description: Bad request - Validation errors
+    delete:
+      summary: Delete a debit card by ID
+      operationId: deleteDebitCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Debit card deleted
+        '404':
+          description: Debit card not found
+
+  /debit-cards/{id}/deactivate:
+    patch:
+      summary: Deactivate a debit card by ID
+      operationId: deactivateDebitCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Debit card deactivated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '404':
+          description: Debit card not found
+
+  /debit-cards/{id}/activate:
+    patch:
+      summary: Activate a debit card by ID
+      operationId: activateDebitCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Debit card activated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '404':
+          description: Debit card not found
+
+  # DEBIT CARD SPECIFIC OPERATIONS
+  /debit-cards/{id}/associate-account:
+    post:
+      summary: Associate an account to debit card
+      description: Associates a bank account to the debit card. First account becomes primary if none exists.
+      operationId: associateAccountToDebitCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssociateAccountRequest'
+      responses:
+        '200':
+          description: Account associated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '400':
+          description: Invalid account or already associated
+        '404':
+          description: Debit card not found
+
+  /debit-cards/{id}/disassociate-account:
+    delete:
+      summary: Disassociate an account from debit card
+      description: Removes account association. Cannot remove primary account if other accounts exist.
+      operationId: disassociateAccountFromDebitCard
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: accountId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account disassociated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitCardResponse'
+        '400':
+          description: Cannot remove primary account or account not associated
+        '404':
+          description: Debit card not found
+
+
+  /debit-cards/{cardNumber}/process-purchase:
+    post:
+      summary: Process debit card purchase/withdrawal
+      description: Processes purchase using cascade logic across associated accounts
+      operationId: processDebitCardPurchase
+      parameters:
+        - name: cardNumber
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DebitPurchaseRequest'
+      responses:
+        '200':
+          description: Purchase processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DebitPurchaseResponse'
+        '400':
+          description: Insufficient funds or invalid request
+        '404':
+          description: Debit card not found
+
 components:
   schemas:
-    CardCreateRequest:
+    CreditCardCreateRequest:
       type: object
       properties:
         customerId:
@@ -324,7 +617,7 @@ components:
         - customerId
         - creditLimit
 
-    CardUpdateRequest:
+    CreditCardUpdateRequest:
       type: object
       properties:
         creditLimit:
@@ -358,6 +651,22 @@ components:
           format: double
           minimum: 0.01
           description: Amount to authorize
+          example: 150.00
+
+    TransactionCreateRequest:
+      type: object
+      required:
+        - amount
+      properties:
+        cardId:
+          type: string
+          description: Card ID
+          example: "64f3cbb5f8a1e53d2f7c34e1"
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          description: Amount to charge
           example: 150.00
 
     PaymentProcessRequest:
@@ -456,11 +765,11 @@ components:
           example: "2025-08-28T10:30:05Z"
         declineReason:
           type: string
-          enum: [ INSUFFICIENT_CREDIT, CARD_INACTIVE]
+          enum: [ INSUFFICIENT_CREDIT, CARD_INACTIVE ]
           description: Reject reason (only if status = DECLINED)
           example: "INSUFFICIENT_CREDIT"
 
-    CardResponse:
+    CreditCardResponse:
       type: object
       properties:
         id:
@@ -472,7 +781,7 @@ components:
         customerId:
           type: string
           example: "68a0cdde7d68c910da0bc239"
-        type:
+        creditCardType:
           type: string
           enum: [ "PERSONAL", "ENTERPRISE" ]
           example: "PERSONAL"
@@ -499,7 +808,7 @@ components:
           type: string
           format: date-time
           example: 2025-08-18T10:15:30Z
-    CardBalanceResponse:
+    CreditCardBalanceResponse:
       type: object
       required:
         - cardId
@@ -541,6 +850,247 @@ components:
           type: boolean
           description: Card active status
           example: true
+    CustomerCardValidationResponse:
+      type: object
+      required:
+        - customerId
+        - hasActiveCard
+        - activeCardCount
+        - validatedAt
+      properties:
+        customerId:
+          type: string
+          description: Customer ID that was validated
+          example: "68a0cdde7d68c910da0bc239"
+        hasActiveCard:
+          type: boolean
+          description: Whether the customer has at least one active credit card
+          example: true
+        activeCardCount:
+          type: integer
+          description: Total number of active credit cards for this customer
+          example: 1
+        cardSummary:
+          type: array
+          description: Summary of active cards (optional, only if hasActiveCard = true)
+          items:
+            type: object
+            properties:
+              cardId:
+                type: string
+                example: "64f3cbb5f8a1e53d2f7c34e1"
+              cardNumber:
+                type: string
+                example: "1234-5678-9123-4567"
+              type:
+                type: string
+                enum: [ "PERSONAL", "ENTERPRISE" ]
+                example: "PERSONAL"
+              creditLimit:
+                type: number
+                format: double
+                example: 10000.00
+              availableCredit:
+                type: number
+                format: double
+                example: 6000.00
+        validatedAt:
+          type: string
+          format: date-time
+          description: Timestamp when the validation was performed
+          example: "2025-08-31T15:30:00Z"
+    CustomerDailyAverageResponse:
+      type: object
+      required:
+        - customerId
+        - period
+        - products
+        - generatedAt
+      properties:
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        period:
+          type: object
+          properties:
+            year:
+              type: integer
+              example: 2025
+            month:
+              type: integer
+              example: 8
+            monthName:
+              type: string
+              example: "August"
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              cardId:
+                type: string
+              cardNumber:
+                type: string
+              productType:
+                type: string
+                enum: [ "CREDIT_CARD" ]
+              averageDailyBalance:
+                type: number
+                format: double
+              averageDailyAvailable:
+                type: number
+                format: double
+              totalDaysWithData:
+                type: integer
+              isComplete:
+                type: boolean
+                description: "Whether we have data for all days in the month"
+        generatedAt:
+          type: string
+          format: date-time
+    DebitCardCreateRequest:
+      type: object
+      properties:
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        primaryAccountId:
+          type: string
+          example: "acc_123456789"
+        associatedAccountIds:
+          type: array
+          items:
+            type: string
+          example: [ "acc_987654321", "acc_456789123" ]
+          description: Additional accounts in priority order
+      required:
+        - customerId
+        - primaryAccountId
+
+    DebitCardUpdateRequest:
+      type: object
+      properties:
+        isActive:
+          type: boolean
+          example: true
+      required:
+        - isActive
+
+    DebitCardResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          example: "64f3cbb5f8a1e53d2f7c34e2"
+        cardNumber:
+          type: string
+          example: "1234-5678-9123-4568"
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        primaryAccountId:
+          type: string
+          example: "acc_123456789"
+        associatedAccountIds:
+          type: array
+          items:
+            type: string
+          example: [ "acc_987654321", "acc_456789123" ]
+        isActive:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2025-08-18T10:15:30Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2025-08-18T10:15:30Z"
+
+    # DEBIT CARD OPERATIONS
+    AssociateAccountRequest:
+      type: object
+      properties:
+        accountId:
+          type: string
+          example: "acc_789123456"
+      required:
+        - accountId
+
+    DebitPurchaseRequest:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: double
+          minimum: 0.01
+          example: 150.00
+        merchantInfo:
+          type: string
+          example: "Amazon Purchase"
+        transactionType:
+          type: string
+          enum: [ "PURCHASE", "WITHDRAWAL", "PAYMENT" ]
+          example: "PURCHASE"
+      required:
+        - amount
+        - transactionType
+
+    DebitPurchaseResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        transactionId:
+          type: string
+          example: "txn_123456789"
+        cardId:
+          type: string
+          example: "64f3cbb5f8a1e53d2f7c34e2"
+        requestedAmount:
+          type: number
+          format: double
+          example: 150.00
+        processedAmount:
+          type: number
+          format: double
+          example: 150.00
+        accountsUsed:
+          type: array
+          items:
+            type: object
+            properties:
+              accountId:
+                type: string
+              amountDeducted:
+                type: number
+                format: double
+              remainingBalance:
+                type: number
+                format: double
+          example: [
+            {
+              "accountId": "acc_123456789",
+              "amountDeducted": 100.00,
+              "remainingBalance": 500.00
+            },
+            {
+              "accountId": "acc_987654321",
+              "amountDeducted": 50.00,
+              "remainingBalance": 200.00
+            }
+          ]
+        errorCode:
+          type: string
+          enum: [ "CARD_INACTIVE", "INSUFFICIENT_FUNDS", "INVALID_AMOUNT", "ACCOUNT_UNAVAILABLE" ]
+        errorMessage:
+          type: string
+        processedAt:
+          type: string
+          format: date-time
+
 
     ErrorResponse:
       type: object

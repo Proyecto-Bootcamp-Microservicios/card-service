@@ -1,11 +1,11 @@
-package com.bootcamp.ntt.card_service.entity;
+package com.bootcamp.ntt.card_service.enums;
 
 import lombok.ToString;
 
 @ToString
 public enum CardType {
-  PERSONAL,
-  ENTERPRISE;
+  CREDIT,
+  DEBIT;
 
   public static CardType fromString(String value) {
     if (value != null) {

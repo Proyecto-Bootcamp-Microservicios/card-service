@@ -10,8 +10,6 @@ import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 import org.springframework.web.server.ServerWebInputException;
 import reactor.core.publisher.Mono;
-
-import java.time.Instant;
 import java.time.OffsetDateTime;
 
 @Slf4j
@@ -124,7 +122,7 @@ public class GlobalExceptionHandler {
     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse));
   }
 
-  @ExceptionHandler(ServerWebInputException.class)
+  /*@ExceptionHandler(ServerWebInputException.class)
   public Mono<ResponseEntity<ErrorResponse>> handleServerWebInputException(ServerWebInputException ex) {
     log.warn("Invalid request payload: {}", ex.getMessage());
 
@@ -134,6 +132,6 @@ public class GlobalExceptionHandler {
     errorResponse.setTimestamp(OffsetDateTime.now());
 
     return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse));
-  }
+  }*/
 
 }

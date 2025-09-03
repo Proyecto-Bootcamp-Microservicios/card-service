@@ -29,11 +29,15 @@ public interface CardService {
 
   Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request);
 
-  Mono<String> generateUniqueCardNumber();
-
   Mono<PaymentProcessResponse> processPayment(String cardNumber, PaymentProcessRequest paymentRequest);
 
   Mono<CardBalanceResponse> getCardBalance(String cardNumber);
+
+  Mono<CustomerCardValidationResponse> getCustomerCardValidation(String customerId);
+
+  Mono<Void> captureAllDailyBalances();
+
+  Mono<CustomerDailyAverageResponse> getCustomerDailyAverages(String customerId, Integer year, Integer month);
 
   //Flux<CardResponse> getActiveCards(Boolean isActive);
 }

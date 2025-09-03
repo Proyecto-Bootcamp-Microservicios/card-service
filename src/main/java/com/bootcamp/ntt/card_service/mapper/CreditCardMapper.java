@@ -1,7 +1,9 @@
 package com.bootcamp.ntt.card_service.mapper;
 
 import com.bootcamp.ntt.card_service.entity.Card;
-import com.bootcamp.ntt.card_service.entity.CardType;
+import com.bootcamp.ntt.card_service.entity.CreditCard;
+import com.bootcamp.ntt.card_service.enums.CardType;
+import com.bootcamp.ntt.card_service.enums.CreditCardType;
 import com.bootcamp.ntt.card_service.model.CardCreateRequest;
 import com.bootcamp.ntt.card_service.model.CardResponse;
 import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
@@ -11,17 +13,17 @@ import java.math.BigDecimal;
 import java.time.ZoneOffset;
 
 @Component
-public class CardMapper {
+public class CreditCardMapper {
 
-  public Card toEntity(CardCreateRequest dto, String customerType, String cardNumber) {
+  public CreditCard toEntity(CardCreateRequest dto, String customerType, String cardNumber) {
     if (dto == null) {
       return null;
     }
 
-    Card card = new Card();
+    CreditCard card = new CreditCard();
     card.setCardNumber(cardNumber);
     card.setCustomerId(dto.getCustomerId());
-    card.setType(CardType.valueOf(customerType));
+    card.setCreditCardtype(CreditCardType.valueOf(customerType));
     card.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));
     card.setAvailableCredit(
       dto.getAvailableCredit() != null ? BigDecimal.valueOf(dto.getAvailableCredit()) : BigDecimal.ZERO
@@ -34,7 +36,7 @@ public class CardMapper {
   }
 
 
-  public Card updateEntity(Card existing, CardUpdateRequest dto) {
+  public CreditCard updateEntity(CreditCard existing, CardUpdateRequest dto) {
     if (existing == null || dto == null) {
       return existing;
     }

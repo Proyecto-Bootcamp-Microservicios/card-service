@@ -2,10 +2,12 @@ package com.bootcamp.ntt.card_service.service.Impl;
 
 import com.bootcamp.ntt.card_service.client.CustomerClient;
 import com.bootcamp.ntt.card_service.entity.Card;
+import com.bootcamp.ntt.card_service.entity.DailyBalance;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
-import com.bootcamp.ntt.card_service.mapper.CardMapper;
+import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.repository.CardRepository;
+import com.bootcamp.ntt.card_service.repository.DailyBalanceRepository;
 import com.bootcamp.ntt.card_service.service.CardService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -13,14 +15,14 @@ import reactor.core.publisher.Mono;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Objects;
 
 
 @Slf4j
@@ -29,7 +31,8 @@ import java.time.OffsetDateTime;
 public class CardServiceImpl implements CardService {
 
   private final CardRepository cardRepository;
-  private final CardMapper cardMapper;
+  private final DailyBalanceRepository dailyBalanceRepository;
+  private final CreditCardMapper creditCardMapper;
   private final CustomerClient customerClient;
   private static final SecureRandom random = new SecureRandom();
 
@@ -37,21 +40,21 @@ public class CardServiceImpl implements CardService {
   @Override
   public Flux<CardResponse> getAllCards(Boolean isActive) {
     return cardRepository.findAll()
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Cards retrieved"));
   }
 
   @Override
   public Flux<CardResponse> getCardsByActive(Boolean isActive) {
     return cardRepository.findByIsActive(isActive)
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Active cards retrieved"));
   }
 
   @Override
   public Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId) {
     return cardRepository.findByIsActiveAndCustomerId(isActive, customerId)
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Cards active by customer retrieved"));
   }
 
@@ -59,7 +62,7 @@ public class CardServiceImpl implements CardService {
   public Mono<CardResponse> getCardById(String id) {
     log.debug("Getting credit card by ID: {}", id);
     return cardRepository.findById(id)
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnSuccess(credit -> {
         if (credit != null) {
           log.debug("Card found with ID: {}", id);
@@ -77,9 +80,9 @@ public class CardServiceImpl implements CardService {
       .flatMap(customerType -> validateCreditCreation(cardRequest.getCustomerId(), customerType.getCustomerType())
         //.then(Mono.just(cardRequest))
         .then(generateUniqueCardNumber())
-        .map(cardNumber -> cardMapper.toEntity(cardRequest, customerType.getCustomerType(),cardNumber)) // Pasamos el tipo
+        .map(cardNumber -> creditCardMapper.toEntity(cardRequest, customerType.getCustomerType(),cardNumber)) // Pasamos el tipo
         .flatMap(cardRepository::save)
-        .map(cardMapper::toResponse))
+        .map(creditCardMapper::toResponse))
       .doOnSuccess(response -> log.debug("Card created with ID: {}", response.getId()))
       .doOnError(error -> log.error("Error creating card: {}", error.getMessage()));
   }
@@ -90,9 +93,9 @@ public class CardServiceImpl implements CardService {
 
     return cardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
-      .map(existing -> cardMapper.updateEntity(existing, cardRequest))
+      .map(existing -> creditCardMapper.updateEntity(existing, cardRequest))
       .flatMap(cardRepository::save)
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()))
       .doOnError(error -> log.error("Error updating card {}: {}", id, error.getMessage()));
   }
@@ -114,7 +117,7 @@ public class CardServiceImpl implements CardService {
         card.setActive(false);  // soft delete
         return cardRepository.save(card);
       })
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} deactivated", id))
       .doOnError(e -> log.error("Error deactivating card {}: {}", id, e.getMessage()));
   }
@@ -127,7 +130,7 @@ public class CardServiceImpl implements CardService {
         card.setActive(true);  // reactivar
         return cardRepository.save(card);
       })
-      .map(cardMapper::toResponse)
+      .map(creditCardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} activated", id))
       .doOnError(e -> log.error("Error activating card {}: {}", id, e.getMessage()));
   }
@@ -199,7 +202,7 @@ public class CardServiceImpl implements CardService {
     return "AUTH-" + System.currentTimeMillis();
   }
 
-  @Override
+
   public Mono<String> generateUniqueCardNumber() {
     String candidate = generateRandomCardNumber();
 
@@ -243,6 +246,152 @@ public class CardServiceImpl implements CardService {
       .doOnError(error -> log.error("Error getting balance for card {}: {}", cardNumber, error.getMessage()));
   }
 
+  @Override
+  public Mono<CustomerCardValidationResponse> getCustomerCardValidation(String customerId) {
+    log.debug("Validating customer cards for customer: {}", customerId);
+
+    return cardRepository.findByIsActiveAndCustomerId(true, customerId)
+      .collectList()
+      .map(activeCards -> buildCustomerValidationResponse(customerId, activeCards))
+      .doOnSuccess(response -> log.debug("Customer validation completed for {}: hasActiveCard={}",
+        customerId, response.getHasActiveCard()))
+      .doOnError(error -> log.error("Error validating customer {}: {}", customerId, error.getMessage()));
+  }
+
+  // Método para capturar todos los saldos diarios (job programado)
+  @Override
+  public Mono<Void> captureAllDailyBalances() {
+    LocalDate today = LocalDate.now();
+    log.info("Starting daily balance capture for date: {}", today);
+
+    return cardRepository.findByIsActive(true)
+      .flatMap(card -> captureCardBalanceForDate(card, today))
+      .then()
+      .doOnSuccess(v -> log.info("Daily balance capture completed for date: {}", today))
+      .doOnError(error -> log.error("Error during daily balance capture: {}", error.getMessage()));
+  }
+
+  // Método helper para capturar saldo de una tarjeta
+  private Mono<Void> captureCardBalanceForDate(Card card, LocalDate date) {
+    return dailyBalanceRepository.existsByCardIdAndDate(card.getId(), date)
+      .flatMap(exists -> {
+        if (exists) {
+          log.debug("Balance already captured for card {} on date {}", card.getId(), date);
+          return Mono.<Void>empty();
+        }
+
+        DailyBalance dailyBalance = new DailyBalance();
+        dailyBalance.setCustomerId(card.getCustomerId());
+        dailyBalance.setCardId(card.getId());
+        dailyBalance.setCardNumber(card.getCardNumber());
+        dailyBalance.setDate(date);
+        dailyBalance.setCurrentBalance(card.getCurrentBalance());
+        dailyBalance.setAvailableCredit(card.getAvailableCredit());
+        dailyBalance.setCreditLimit(card.getCreditLimit());
+        dailyBalance.setCapturedAt(LocalDateTime.now());
+
+        return dailyBalanceRepository.save(dailyBalance).then();
+      });
+  }
+
+  // Método para obtener promedios diarios (para report-service)
+  @Override
+  public Mono<CustomerDailyAverageResponse> getCustomerDailyAverages(String customerId, Integer year, Integer month) {
+    log.debug("Getting daily averages for customer: {} for {}/{}", customerId, month, year);
+
+    LocalDate startDate = LocalDate.of(year, month, 1);
+    LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+
+    return dailyBalanceRepository.findByCustomerIdAndDateBetween(customerId, startDate, endDate)
+      .groupBy(DailyBalance::getCardId)
+      .flatMap(this::calculateCardAverage)
+      .collectList()
+      .map(products -> buildDailyAverageResponse(customerId, year, month, products))
+      .doOnSuccess(response -> log.debug("Daily averages calculated for customer {}: {} products",
+        customerId, response.getProducts().size()))
+      .doOnError(error -> log.error("Error calculating daily averages for customer {}: {}", customerId, error.getMessage()));
+  }
+
+  // Helper para calcular promedio de una tarjeta
+  private Mono<CustomerDailyAverageResponseProductsInner> calculateCardAverage(Flux<DailyBalance> cardBalances) {
+    return cardBalances.collectList()
+      .mapNotNull(balances -> {
+        if (balances.isEmpty()) return null;
+
+        DailyBalance firstBalance = balances.get(0);
+        BigDecimal sumBalance = balances.stream()
+          .map(DailyBalance::getCurrentBalance)
+          .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal sumAvailable = balances.stream()
+          .map(DailyBalance::getAvailableCredit)
+          .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        double averageBalance = sumBalance.divide(BigDecimal.valueOf(balances.size()), 2, java.math.RoundingMode.HALF_UP).doubleValue();
+        double averageAvailable = sumAvailable.divide(BigDecimal.valueOf(balances.size()), 2, java.math.RoundingMode.HALF_UP).doubleValue();
+
+        CustomerDailyAverageResponseProductsInner product = new CustomerDailyAverageResponseProductsInner();
+        product.setCardId(firstBalance.getCardId());
+        product.setCardNumber(firstBalance.getCardNumber());
+        product.setProductType(CustomerDailyAverageResponseProductsInner.ProductTypeEnum.CREDIT_CARD);
+        product.setAverageDailyBalance(averageBalance);
+        product.setAverageDailyAvailable(averageAvailable);
+        product.setTotalDaysWithData(balances.size());
+        product.setIsComplete(balances.size() >= LocalDate.now().lengthOfMonth());
+
+        return product;
+      })
+      .filter(Objects::nonNull);
+  }
+
+  // Helper para construir respuesta final
+  private CustomerDailyAverageResponse buildDailyAverageResponse(String customerId, Integer year, Integer month,
+                                                                 java.util.List<CustomerDailyAverageResponseProductsInner> products) {
+    CustomerDailyAverageResponse response = new CustomerDailyAverageResponse();
+    response.setCustomerId(customerId);
+
+    CustomerDailyAverageResponsePeriod period = new CustomerDailyAverageResponsePeriod();
+    period.setYear(year);
+    period.setMonth(month);
+    period.setMonthName(java.time.Month.of(month).name());
+    response.setPeriod(period);
+
+    response.setProducts(products);
+    response.setGeneratedAt(java.time.OffsetDateTime.now());
+
+    return response;
+  }
+
+  //  helper para la respuesta
+  private CustomerCardValidationResponse buildCustomerValidationResponse(String customerId, List<Card> activeCards) {
+    CustomerCardValidationResponse response = new CustomerCardValidationResponse();
+    response.setCustomerId(customerId);
+    response.setHasActiveCard(!activeCards.isEmpty());
+    response.setActiveCardCount(activeCards.size());
+    response.setValidatedAt(OffsetDateTime.now());
+
+    // Si hay tarjetas activas, agregar el resumen
+    if (!activeCards.isEmpty()) {
+      java.util.List<CustomerCardValidationResponseCardSummaryInner> cardSummary =
+        activeCards.stream()
+          .map(this::buildCardSummary)
+          .collect(java.util.stream.Collectors.toList());
+      response.setCardSummary(cardSummary);
+    }
+
+    return response;
+  }
+
+  //  helper para el resumen de cada tarjeta
+  private CustomerCardValidationResponseCardSummaryInner buildCardSummary(Card card) {
+    CustomerCardValidationResponseCardSummaryInner summary = new CustomerCardValidationResponseCardSummaryInner();
+    summary.setCardId(card.getId());
+    summary.setCardNumber(card.getCardNumber());
+    summary.setType(CustomerCardValidationResponseCardSummaryInner.TypeEnum.valueOf(card.getType().name()));
+    summary.setCreditLimit(card.getCreditLimit().doubleValue());
+    summary.setAvailableCredit(card.getAvailableCredit().doubleValue());
+    return summary;
+  }
   //Validaciones
   private Mono<Void> validateCreditCreation(String customerId, String customerType) {
     // Validar reglas de negocio según el tipo
