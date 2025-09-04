@@ -2,11 +2,13 @@ package com.bootcamp.ntt.card_service.service.Impl;
 
 import com.bootcamp.ntt.card_service.client.CustomerClient;
 import com.bootcamp.ntt.card_service.entity.Card;
+import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.entity.DailyBalance;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.repository.CardRepository;
+import com.bootcamp.ntt.card_service.repository.CreditCardRepository;
 import com.bootcamp.ntt.card_service.repository.DailyBalanceRepository;
 import com.bootcamp.ntt.card_service.service.CardService;
 import org.springframework.stereotype.Service;
@@ -30,7 +32,7 @@ import java.util.Objects;
 @RequiredArgsConstructor
 public class CardServiceImpl implements CardService {
 
-  private final CardRepository cardRepository;
+  private final CreditCardRepository creditCardRepository;
   private final DailyBalanceRepository dailyBalanceRepository;
   private final CreditCardMapper creditCardMapper;
   private final CustomerClient customerClient;
@@ -38,30 +40,30 @@ public class CardServiceImpl implements CardService {
 
 
   @Override
-  public Flux<CardResponse> getAllCards(Boolean isActive) {
-    return cardRepository.findAll()
+  public Flux<CreditCardResponse> getAllCards(Boolean isActive) {
+    return creditCardRepository.findAll()
       .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Cards retrieved"));
   }
 
   @Override
-  public Flux<CardResponse> getCardsByActive(Boolean isActive) {
-    return cardRepository.findByIsActive(isActive)
+  public Flux<CreditCardResponse> getCardsByActive(Boolean isActive) {
+    return creditCardRepository.findByIsActive(isActive)
       .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Active cards retrieved"));
   }
 
   @Override
-  public Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId) {
-    return cardRepository.findByIsActiveAndCustomerId(isActive, customerId)
+  public Flux<CreditCardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId) {
+    return creditCardRepository.findByIsActiveAndCustomerId(isActive, customerId)
       .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Cards active by customer retrieved"));
   }
 
   @Override
-  public Mono<CardResponse> getCardById(String id) {
+  public Mono<CreditCardResponse> getCardById(String id) {
     log.debug("Getting credit card by ID: {}", id);
-    return cardRepository.findById(id)
+    return creditCardRepository.findById(id)
       .map(creditCardMapper::toResponse)
       .doOnSuccess(credit -> {
         if (credit != null) {
@@ -73,7 +75,7 @@ public class CardServiceImpl implements CardService {
   }
 
   @Override
-  public Mono<CardResponse> createCard(CardCreateRequest cardRequest) {
+  public Mono<CreditCardResponse> createCard(CreditCardCreateRequest cardRequest) {
     log.debug("Creating card for customer: {}", cardRequest.getCustomerId());
 
     return customerClient.getCustomerType(cardRequest.getCustomerId())
@@ -81,20 +83,20 @@ public class CardServiceImpl implements CardService {
         //.then(Mono.just(cardRequest))
         .then(generateUniqueCardNumber())
         .map(cardNumber -> creditCardMapper.toEntity(cardRequest, customerType.getCustomerType(),cardNumber)) // Pasamos el tipo
-        .flatMap(cardRepository::save)
+        .flatMap(creditCardRepository::save)
         .map(creditCardMapper::toResponse))
       .doOnSuccess(response -> log.debug("Card created with ID: {}", response.getId()))
       .doOnError(error -> log.error("Error creating card: {}", error.getMessage()));
   }
 
   @Override
-  public Mono<CardResponse> updateCard(String id, CardUpdateRequest cardRequest) {
+  public Mono<CreditCardResponse> updateCard(String id, CreditCardUpdateRequest cardRequest) {
     log.debug("Updating card with ID: {}", id);
 
-    return cardRepository.findById(id)
+    return creditCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
       .map(existing -> creditCardMapper.updateEntity(existing, cardRequest))
-      .flatMap(cardRepository::save)
+      .flatMap(creditCardRepository::save)
       .map(creditCardMapper::toResponse)
       .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()))
       .doOnError(error -> log.error("Error updating card {}: {}", id, error.getMessage()));
@@ -102,20 +104,20 @@ public class CardServiceImpl implements CardService {
 
   @Override
   public Mono<Void> deleteCard(String id) {
-    return cardRepository.findById(id)
+    return creditCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
-      .flatMap(cardRepository::delete)
+      .flatMap(creditCardRepository::delete)
       .doOnSuccess(unused -> log.debug("Card deleted"))
       .doOnError(error -> log.error("Error deleting card {}: {}", id, error.getMessage()));
   }
 
   @Override
-  public Mono<CardResponse> deactivateCard(String id) {
-    return cardRepository.findById(id)
+  public Mono<CreditCardResponse> deactivateCard(String id) {
+    return creditCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + id)))
       .flatMap(card -> {
         card.setActive(false);  // soft delete
-        return cardRepository.save(card);
+        return creditCardRepository.save(card);
       })
       .map(creditCardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} deactivated", id))
@@ -123,12 +125,12 @@ public class CardServiceImpl implements CardService {
   }
 
   @Override
-  public Mono<CardResponse> activateCard(String id) {
-    return cardRepository.findById(id)
+  public Mono<CreditCardResponse> activateCard(String id) {
+    return creditCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + id)))
       .flatMap(card -> {
         card.setActive(true);  // reactivar
-        return cardRepository.save(card);
+        return creditCardRepository.save(card);
       })
       .map(creditCardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} activated", id))
@@ -137,12 +139,12 @@ public class CardServiceImpl implements CardService {
 
   @Override
   public Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request) {
-    return cardRepository.findByCardNumber(cardNumber)
+    return creditCardRepository.findByCardNumber(cardNumber)
       .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
       .flatMap(creditCard -> validateAndProcessCharge(creditCard, request.getAmount()));
   }
 
-  private Mono<ChargeAuthorizationResponse> validateAndProcessCharge(Card card, Double amount) {
+  private Mono<ChargeAuthorizationResponse> validateAndProcessCharge(CreditCard card, Double amount) {
 
     Double availableCredit = card.getAvailableCredit().doubleValue();
 
@@ -166,7 +168,7 @@ public class CardServiceImpl implements CardService {
     card.setAvailableCredit(BigDecimal.valueOf(newAvailableCredit));
     card.setCurrentBalance(card.getCurrentBalance().add(BigDecimal.valueOf(amount)));
 
-    return cardRepository.save(card)
+    return creditCardRepository.save(card)
       .map(savedCard -> {
         ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
         response.setAuthorizationCode(generateAuthCode());
@@ -206,7 +208,7 @@ public class CardServiceImpl implements CardService {
   public Mono<String> generateUniqueCardNumber() {
     String candidate = generateRandomCardNumber();
 
-    return cardRepository.findByCardNumber(candidate)
+    return creditCardRepository.findByCardNumber(candidate)
       .flatMap(existing -> generateUniqueCardNumber()) // si existe, intenta de nuevo
       .switchIfEmpty(Mono.just(candidate)); // si no existe, úsalo
   }
@@ -222,7 +224,7 @@ public class CardServiceImpl implements CardService {
   @Override
   public Mono<PaymentProcessResponse> processPayment(String cardNumber, PaymentProcessRequest paymentRequest) {
     log.debug("Processing payment for card: {}, amount: {}", cardNumber, paymentRequest.getAmount());
-    return cardRepository.findByCardNumber(cardNumber)
+    return creditCardRepository.findByCardNumber(cardNumber)
       .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
       .flatMap(card -> validateAndProcessPayment(card, paymentRequest))
       .doOnSuccess(response -> {
@@ -236,10 +238,10 @@ public class CardServiceImpl implements CardService {
       .doOnError(error -> log.error("Error processing payment for card {}: {}", cardNumber, error.getMessage()));
   }
   @Override
-  public Mono<CardBalanceResponse> getCardBalance(String cardNumber) {
+  public Mono<CreditCardBalanceResponse> getCardBalance(String cardNumber) {
     log.debug("Getting balance for card: {}", cardNumber);
 
-    return cardRepository.findByCardNumber(cardNumber)
+    return creditCardRepository.findByCardNumber(cardNumber)
       .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
       .map(this::buildBalanceResponse)
       .doOnSuccess(response -> log.debug("Balance retrieved for card: {}", cardNumber))
@@ -250,7 +252,7 @@ public class CardServiceImpl implements CardService {
   public Mono<CustomerCardValidationResponse> getCustomerCardValidation(String customerId) {
     log.debug("Validating customer cards for customer: {}", customerId);
 
-    return cardRepository.findByIsActiveAndCustomerId(true, customerId)
+    return creditCardRepository.findByIsActiveAndCustomerId(true, customerId)
       .collectList()
       .map(activeCards -> buildCustomerValidationResponse(customerId, activeCards))
       .doOnSuccess(response -> log.debug("Customer validation completed for {}: hasActiveCard={}",
@@ -264,7 +266,7 @@ public class CardServiceImpl implements CardService {
     LocalDate today = LocalDate.now();
     log.info("Starting daily balance capture for date: {}", today);
 
-    return cardRepository.findByIsActive(true)
+    return creditCardRepository.findByIsActive(true)
       .flatMap(card -> captureCardBalanceForDate(card, today))
       .then()
       .doOnSuccess(v -> log.info("Daily balance capture completed for date: {}", today))
@@ -272,7 +274,7 @@ public class CardServiceImpl implements CardService {
   }
 
   // Método helper para capturar saldo de una tarjeta
-  private Mono<Void> captureCardBalanceForDate(Card card, LocalDate date) {
+  private Mono<Void> captureCardBalanceForDate(CreditCard card, LocalDate date) {
     return dailyBalanceRepository.existsByCardIdAndDate(card.getId(), date)
       .flatMap(exists -> {
         if (exists) {
@@ -363,7 +365,7 @@ public class CardServiceImpl implements CardService {
   }
 
   //  helper para la respuesta
-  private CustomerCardValidationResponse buildCustomerValidationResponse(String customerId, List<Card> activeCards) {
+  private CustomerCardValidationResponse buildCustomerValidationResponse(String customerId, List<CreditCard> activeCards) {
     CustomerCardValidationResponse response = new CustomerCardValidationResponse();
     response.setCustomerId(customerId);
     response.setHasActiveCard(!activeCards.isEmpty());
@@ -383,7 +385,7 @@ public class CardServiceImpl implements CardService {
   }
 
   //  helper para el resumen de cada tarjeta
-  private CustomerCardValidationResponseCardSummaryInner buildCardSummary(Card card) {
+  private CustomerCardValidationResponseCardSummaryInner buildCardSummary(CreditCard card) {
     CustomerCardValidationResponseCardSummaryInner summary = new CustomerCardValidationResponseCardSummaryInner();
     summary.setCardId(card.getId());
     summary.setCardNumber(card.getCardNumber());
@@ -403,7 +405,7 @@ public class CardServiceImpl implements CardService {
   }
 
   private Mono<Void> validatePersonalCreditCardRules(String customerId) {
-    return cardRepository.countByCustomerIdAndIsActiveTrue(customerId)
+    return creditCardRepository.countByCustomerIdAndIsActiveTrue(customerId)
       .flatMap(activeCredits -> {
         if (activeCredits > 0) {
           return Mono.error(new BusinessRuleException(
@@ -420,7 +422,7 @@ public class CardServiceImpl implements CardService {
     return Mono.empty();
   }
 
-  private Mono<PaymentProcessResponse> validateAndProcessPayment(Card card, PaymentProcessRequest request) {
+  private Mono<PaymentProcessResponse> validateAndProcessPayment(CreditCard card, PaymentProcessRequest request) {
     BigDecimal paymentAmount = BigDecimal.valueOf(request.getAmount());
     // Validar estado de la tarjeta
     if (!card.isActive()) {
@@ -451,10 +453,10 @@ public class CardServiceImpl implements CardService {
     card.setCurrentBalance(newCurrentBalance);
     card.setAvailableCredit(newAvailableCredit);
 
-    return cardRepository.save(card)
+    return creditCardRepository.save(card)
       .map(savedCard -> createPaymentSuccessResponse(savedCard, paymentAmount, actualPaymentAmount));
   }
-  private BigDecimal calculateActualPaymentAmount(Card card, BigDecimal requestedAmount) {
+  private BigDecimal calculateActualPaymentAmount(CreditCard card, BigDecimal requestedAmount) {
     // Si el pago es mayor al balance, se paga solo lo que se debe
     if (requestedAmount.compareTo(card.getCurrentBalance()) > 0) {
       log.info("Payment amount {} exceeds balance {}, adjusting to full balance",
@@ -463,7 +465,7 @@ public class CardServiceImpl implements CardService {
     }
     return requestedAmount;
   }
-  private PaymentProcessResponse createPaymentSuccessResponse(Card card, BigDecimal requestedAmount, BigDecimal actualAmount) {
+  private PaymentProcessResponse createPaymentSuccessResponse(CreditCard card, BigDecimal requestedAmount, BigDecimal actualAmount) {
     PaymentProcessResponse response = new PaymentProcessResponse();
     response.setSuccess(true);
     response.setCardId(card.getId());
@@ -485,14 +487,14 @@ public class CardServiceImpl implements CardService {
     response.setProcessedAt(OffsetDateTime.now());
     return response;
   }
-  private CardBalanceResponse buildBalanceResponse(Card card) {
+  private CreditCardBalanceResponse buildBalanceResponse(CreditCard card) {
     // Calcular porcentaje de utilización
     BigDecimal utilizationPercentage = card.getCreditLimit().compareTo(BigDecimal.ZERO) > 0
       ? card.getCurrentBalance()
       .multiply(BigDecimal.valueOf(100))
       .divide(card.getCreditLimit(), 2, java.math.RoundingMode.HALF_UP)
       : BigDecimal.ZERO;
-    CardBalanceResponse response = new CardBalanceResponse();
+    CreditCardBalanceResponse response = new CreditCardBalanceResponse();
     response.setCardId(card.getId());
     response.setCardNumber(card.getCardNumber());
     response.setCreditLimit(card.getCreditLimit().doubleValue());

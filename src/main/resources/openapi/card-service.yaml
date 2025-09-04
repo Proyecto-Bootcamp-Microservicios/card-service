@@ -358,6 +358,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/CustomerDailyAverageResponse'
+        '404':
+          description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /debit-cards:
     get:
       summary: Get all debit cards
@@ -592,7 +598,96 @@ paths:
           description: Insufficient funds or invalid request
         '404':
           description: Debit card not found
+  /debit-cards/{cardId}/primary-account/balance:
+    get:
+      summary: Get primary account balance via debit card
+      description: Retrieves the balance of the primary account associated with the debit card
+      operationId: getDebitCardPrimaryAccountBalance
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Primary account balance retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrimaryAccountBalanceResponse'
+        '404':
+          description: Debit card not found
 
+  /cards/{cardId}/movements:
+    get:
+      summary: Get card movements (last 10)
+      description: Retrieves the last 10 movements for credit or debit card
+      operationId: getCardMovements
+      parameters:
+        - name: cardId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+      responses:
+        '200':
+          description: Card movements retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardMovementsResponse'
+        '404':
+          description: Card not found
+
+  /customers/{customerId}/product-eligibility:
+    get:
+      summary: Check customer eligibility for new products
+      description: Validates if customer can acquire new products (no overdue credit debts)
+      operationId: checkCustomerProductEligibility
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Eligibility status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductEligibilityResponse'
+        '404':
+          description: Customer not found
+
+  /customers/{customerId}/cards-summary:
+    get:
+      summary: Get customer cards summary
+      description: Returns all cards (credit and debit) for a specific customer
+      operationId: getCustomerCardsSummary
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Customer cards summary retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerCardsSummaryResponse'
+        '404':
+          description: Customer not found
 components:
   schemas:
     CreditCardCreateRequest:
@@ -1090,7 +1185,195 @@ components:
         processedAt:
           type: string
           format: date-time
+    PrimaryAccountBalanceResponse:
+      type: object
+      required:
+        - cardId
+        - primaryAccountId
+        - accountNumber
+        - balance
+        - currency
+        - accountType
+      properties:
+        cardId:
+          type: string
+          example: "64f3cbb5f8a1e53d2f7c34e2"
+        primaryAccountId:
+          type: string
+          example: "acc_123456789"
+        accountNumber:
+          type: string
+          example: "0011-0123-456789"
+        balance:
+          type: number
+          format: double
+          example: 1500.50
+        currency:
+          type: string
+          example: "PEN"
+        accountType:
+          type: string
+          enum: [ "SAVINGS", "CHECKING" ]
+          example: "SAVINGS"
+        lastMovementDate:
+          type: string
+          format: date-time
+          example: "2025-09-01T10:30:00Z"
 
+    CardMovementsResponse:
+      type: object
+      required:
+        - cardId
+        - cardType
+        - movements
+        - totalCount
+      properties:
+        cardId:
+          type: string
+          example: "64f3cbb5f8a1e53d2f7c34e2"
+        cardType:
+          type: string
+          enum: [ "CREDIT", "DEBIT" ]
+          example: "DEBIT"
+        movements:
+          type: array
+          items:
+            $ref: '#/components/schemas/CardMovement'
+        totalCount:
+          type: integer
+          example: 10
+        retrievedAt:
+          type: string
+          format: date-time
+
+    CardMovement:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          example: "txn_123456789"
+        amount:
+          type: number
+          format: double
+          example: 150.00
+        transactionType:
+          type: string
+          enum: [ "PURCHASE", "WITHDRAWAL", "PAYMENT", "CHARGE", "AUTHORIZATION" ]
+          example: "PURCHASE"
+        merchantInfo:
+          type: string
+          example: "Amazon Purchase"
+        accountsAffected:
+          type: array
+          items:
+            type: object
+            properties:
+              accountId:
+                type: string
+              amountDeducted:
+                type: number
+                format: double
+        processedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [ "COMPLETED", "PENDING", "FAILED" ]
+
+    ProductEligibilityResponse:
+      type: object
+      required:
+        - customerId
+        - isEligible
+        - validatedAt
+      properties:
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        isEligible:
+          type: boolean
+          example: true
+        eligibilityReasons:
+          type: array
+          items:
+            type: string
+          example: [ "NO_OVERDUE_DEBTS", "GOOD_PAYMENT_HISTORY" ]
+        ineligibilityReasons:
+          type: array
+          items:
+            type: string
+          example: [ "OVERDUE_CREDIT_DEBT", "DELINQUENT_PAYMENTS" ]
+        overdueProducts:
+          type: array
+          items:
+            type: object
+            properties:
+              productId:
+                type: string
+              productType:
+                type: string
+                enum: [ "CREDIT_CARD" ]
+              overdueAmount:
+                type: number
+                format: double
+              daysPastDue:
+                type: integer
+        validatedAt:
+          type: string
+          format: date-time
+
+    CustomerCardsSummaryResponse:
+      type: object
+      required:
+        - customerId
+        - creditCards
+        - debitCards
+        - totalActiveCards
+      properties:
+        customerId:
+          type: string
+          example: "68a0cdde7d68c910da0bc239"
+        creditCards:
+          type: array
+          items:
+            type: object
+            properties:
+              cardId:
+                type: string
+              cardNumber:
+                type: string
+              creditLimit:
+                type: number
+                format: double
+              availableCredit:
+                type: number
+                format: double
+              currentBalance:
+                type: number
+                format: double
+              isActive:
+                type: boolean
+        debitCards:
+          type: array
+          items:
+            type: object
+            properties:
+              cardId:
+                type: string
+              cardNumber:
+                type: string
+              primaryAccountId:
+                type: string
+              associatedAccountsCount:
+                type: integer
+              isActive:
+                type: boolean
+        totalActiveCards:
+          type: integer
+          example: 3
+        retrievedAt:
+          type: string
+          format: date-time
 
     ErrorResponse:
       type: object

@@ -4,9 +4,9 @@ import com.bootcamp.ntt.card_service.entity.Card;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.enums.CreditCardType;
-import com.bootcamp.ntt.card_service.model.CardCreateRequest;
-import com.bootcamp.ntt.card_service.model.CardResponse;
-import com.bootcamp.ntt.card_service.model.CardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.CreditCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.CreditCardResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardUpdateRequest;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
@@ -15,7 +15,7 @@ import java.time.ZoneOffset;
 @Component
 public class CreditCardMapper {
 
-  public CreditCard toEntity(CardCreateRequest dto, String customerType, String cardNumber) {
+  public CreditCard toEntity(CreditCardCreateRequest dto, String customerType, String cardNumber) {
     if (dto == null) {
       return null;
     }
@@ -36,7 +36,7 @@ public class CreditCardMapper {
   }
 
 
-  public CreditCard updateEntity(CreditCard existing, CardUpdateRequest dto) {
+  public CreditCard updateEntity(CreditCard existing, CreditCardUpdateRequest dto) {
     if (existing == null || dto == null) {
       return existing;
     }
@@ -60,16 +60,16 @@ public class CreditCardMapper {
     return existing;
   }
 
-  public CardResponse toResponse(Card entity) {
+  public CreditCardResponse toResponse(CreditCard entity) {
     if (entity == null) {
       return null;
     }
 
-    CardResponse response = new CardResponse();
+    CreditCardResponse response = new CreditCardResponse();
     response.setId(entity.getId());
     response.setCardNumber(entity.getCardNumber());
     response.setCustomerId(entity.getCustomerId());
-    response.setType(CardResponse.TypeEnum.valueOf(entity.getType().name()));
+    response.setCreditCardType(CreditCardResponse.CreditCardTypeEnum.valueOf(entity.getType().name()));
     response.setCreditLimit(entity.getCreditLimit().doubleValue());
     response.setAvailableCredit(entity.getAvailableCredit().doubleValue());
     response.setCurrentBalance(entity.getCurrentBalance().doubleValue());

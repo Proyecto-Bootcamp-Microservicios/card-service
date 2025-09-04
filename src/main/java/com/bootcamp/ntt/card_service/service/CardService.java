@@ -9,29 +9,29 @@ import java.math.BigDecimal;
 
 public interface CardService {
 
-  Flux<CardResponse> getAllCards(Boolean isActive);
+  Flux<CreditCardResponse> getAllCards(Boolean isActive);
 
-  Flux<CardResponse> getCardsByActive(Boolean isActive);
+  Flux<CreditCardResponse> getCardsByActive(Boolean isActive);
 
-  Mono<CardResponse> getCardById(String id);
+  Mono<CreditCardResponse> getCardById(String id);
 
-  Flux<CardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId);
+  Flux<CreditCardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId);
 
-  Mono<CardResponse> createCard(CardCreateRequest cardRequest);
+  Mono<CreditCardResponse> createCard(CreditCardCreateRequest cardRequest);
 
-  Mono<CardResponse> updateCard(String id, CardUpdateRequest cardRequest);
+  Mono<CreditCardResponse> updateCard(String id, CreditCardUpdateRequest cardRequest);
 
   Mono<Void> deleteCard(String id);
 
-  Mono<CardResponse> deactivateCard(String id);
+  Mono<CreditCardResponse> deactivateCard(String id);
 
-  Mono<CardResponse> activateCard(String id);
+  Mono<CreditCardResponse> activateCard(String id);
 
   Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request);
 
   Mono<PaymentProcessResponse> processPayment(String cardNumber, PaymentProcessRequest paymentRequest);
 
-  Mono<CardBalanceResponse> getCardBalance(String cardNumber);
+  Mono<CreditCardBalanceResponse> getCardBalance(String cardNumber);
 
   Mono<CustomerCardValidationResponse> getCustomerCardValidation(String customerId);
 
@@ -39,5 +39,5 @@ public interface CardService {
 
   Mono<CustomerDailyAverageResponse> getCustomerDailyAverages(String customerId, Integer year, Integer month);
 
-  //Flux<CardResponse> getActiveCards(Boolean isActive);
+  //Flux<CreditCardResponse> getActiveCards(Boolean isActive);
 }

@@ -1,6 +1,6 @@
 package com.bootcamp.ntt.card_service.delegate;
 
-import com.bootcamp.ntt.card_service.api.CardsApiDelegate;
+import com.bootcamp.ntt.card_service.api.CreditCardsApiDelegate;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.CardService;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,7 @@ import reactor.core.publisher.Mono;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class CardsApiDelegateImpl implements CardsApiDelegate {
+public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
   private final CardService cardService;
 
@@ -23,8 +23,8 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * POST /cards : Create a new card
    */
   @Override
-  public Mono<ResponseEntity<CardResponse>> createCreditCard(
-    Mono<CardCreateRequest> cardRequest,
+  public Mono<ResponseEntity<CreditCardResponse>> createCreditCard(
+    Mono<CreditCardCreateRequest> cardRequest,
     ServerWebExchange exchange) {
 
     log.info("Creating new card - Request received");
@@ -42,14 +42,14 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * GET /cards : Get all cards
    */
   @Override
-  public Mono<ResponseEntity<Flux<CardResponse>>> getAllCreditCards(
+  public Mono<ResponseEntity<Flux<CreditCardResponse>>> getAllCreditCards(
     String customerId,
     Boolean isActive,
     ServerWebExchange exchange) {
 
     Boolean activeFilter = (isActive != null) ? isActive : true;
 
-    Flux<CardResponse> cards = (customerId != null)
+    Flux<CreditCardResponse> cards = (customerId != null)
       ? cardService.getCardsByActiveAndCustomer(activeFilter, customerId)
       : cardService.getCardsByActive(activeFilter);
 
@@ -62,7 +62,7 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * GET /cards/{id} : Get a card by ID
    */
   @Override
-  public Mono<ResponseEntity<CardResponse>> getCreditCardById(
+  public Mono<ResponseEntity<CreditCardResponse>> getCreditCardById(
     String id,
     ServerWebExchange exchange) {
 
@@ -84,9 +84,9 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * PUT /cards/{id} : Update a card
    */
   @Override
-  public Mono<ResponseEntity<CardResponse>> updateCreditCard(
+  public Mono<ResponseEntity<CreditCardResponse>> updateCreditCard(
     String id,
-    Mono<CardUpdateRequest> cardRequest,
+    Mono<CreditCardUpdateRequest> cardRequest,
     ServerWebExchange exchange) {
 
     log.info("Updating card with ID: {}", id);
@@ -122,7 +122,7 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * PUT /cards/{id}/deactivate : Deactivate a card
    */
   @Override
-  public Mono<ResponseEntity<CardResponse>> deactivateCreditCard(
+  public Mono<ResponseEntity<CreditCardResponse>> deactivateCreditCard(
     String id,
     ServerWebExchange exchange) {
 
@@ -140,7 +140,7 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * PUT /cards/{id}/activate : Activate a card
    */
   @Override
-  public Mono<ResponseEntity<CardResponse>> activateCreditCard(
+  public Mono<ResponseEntity<CreditCardResponse>> activateCreditCard(
     String id,
     ServerWebExchange exchange) {
 
@@ -202,7 +202,7 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    GET /cards/{cardNumber}/balance : Get card balance
    */
   @Override
-  public Mono<ResponseEntity<CardBalanceResponse>> getCardBalance(
+  public Mono<ResponseEntity<CreditCardBalanceResponse>> getCardBalance(
     String cardNumber,
     ServerWebExchange exchange) {
     log.info("Getting balance for card: {}", cardNumber);
