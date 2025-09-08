@@ -1,16 +1,17 @@
 package com.bootcamp.ntt.card_service.service.Impl;
 
 import com.bootcamp.ntt.card_service.client.CustomerClient;
-import com.bootcamp.ntt.card_service.entity.Card;
+import com.bootcamp.ntt.card_service.client.CustomerServiceClient;
+import com.bootcamp.ntt.card_service.client.TransactionServiceClient;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.entity.DailyBalance;
+import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
-import com.bootcamp.ntt.card_service.repository.CardRepository;
 import com.bootcamp.ntt.card_service.repository.CreditCardRepository;
 import com.bootcamp.ntt.card_service.repository.DailyBalanceRepository;
-import com.bootcamp.ntt.card_service.service.CardService;
+import com.bootcamp.ntt.card_service.service.CreditCardService;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -23,6 +24,7 @@ import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 
@@ -30,12 +32,14 @@ import java.util.Objects;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class CardServiceImpl implements CardService {
+public class CreditCardServiceImpl implements CreditCardService {
 
   private final CreditCardRepository creditCardRepository;
   private final DailyBalanceRepository dailyBalanceRepository;
   private final CreditCardMapper creditCardMapper;
   private final CustomerClient customerClient;
+  private final CustomerServiceClient customerServiceClient;
+  private final TransactionServiceClient transactionServiceClient;
   private static final SecureRandom random = new SecureRandom();
 
 
@@ -48,14 +52,14 @@ public class CardServiceImpl implements CardService {
 
   @Override
   public Flux<CreditCardResponse> getCardsByActive(Boolean isActive) {
-    return creditCardRepository.findByIsActive(isActive)
+    return creditCardRepository.findByIsActiveAndType(isActive, CardType.CREDIT)
       .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Active cards retrieved"));
   }
 
   @Override
   public Flux<CreditCardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId) {
-    return creditCardRepository.findByIsActiveAndCustomerId(isActive, customerId)
+    return creditCardRepository.findByIsActiveAndCustomerIdAndType(isActive, customerId, CardType.CREDIT)
       .map(creditCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Cards active by customer retrieved"));
   }
@@ -141,11 +145,10 @@ public class CardServiceImpl implements CardService {
   public Mono<ChargeAuthorizationResponse> authorizeCharge(String cardNumber, ChargeAuthorizationRequest request) {
     return creditCardRepository.findByCardNumber(cardNumber)
       .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
-      .flatMap(creditCard -> validateAndProcessCharge(creditCard, request.getAmount()));
+      .flatMap(creditCard -> validateAndProcessCharge(creditCard, request));
   }
 
-  private Mono<ChargeAuthorizationResponse> validateAndProcessCharge(CreditCard card, Double amount) {
-
+  private Mono<ChargeAuthorizationResponse> validateAndProcessCharge(CreditCard card, ChargeAuthorizationRequest request) {
     Double availableCredit = card.getAvailableCredit().doubleValue();
 
     // 1. Validar estado de la tarjeta
@@ -154,32 +157,71 @@ public class CardServiceImpl implements CardService {
     }
 
     // 2. Validar monto
-    if (amount <= 0) {
+    if (request.getAmount() <= 0) {
       return Mono.just(createDeclinedResponse(availableCredit, "INVALID_AMOUNT"));
     }
 
     // 3. Validar crédito disponible
-    if (card.getAvailableCredit().doubleValue() < amount) {
+    if (card.getAvailableCredit().doubleValue() < request.getAmount()) {
       return Mono.just(createDeclinedResponse(availableCredit, "INSUFFICIENT_CREDIT"));
     }
 
-    // 4. Procesar cargo - APPROVED
-    double newAvailableCredit = availableCredit - amount;
-    card.setAvailableCredit(BigDecimal.valueOf(newAvailableCredit));
-    card.setCurrentBalance(card.getCurrentBalance().add(BigDecimal.valueOf(amount)));
+    // 4. Procesar cargo - APPROVED (SIN actualizar aquí, se hace en processApprovedCharge)
+    return processApprovedCharge(card, request);
+  }
 
-    return creditCardRepository.save(card)
-      .map(savedCard -> {
-        ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
-        response.setAuthorizationCode(generateAuthCode());
-        response.setStatus(ChargeAuthorizationResponse.StatusEnum.APPROVED);
-        response.setAuthorizedAmount(amount);
-        response.setAvailableCreditAfter(savedCard.getAvailableCredit().doubleValue());
-        response.setProcessedAt(OffsetDateTime.now());
-        return response;
-      })
+  private Mono<ChargeAuthorizationResponse> processApprovedCharge(CreditCard card, ChargeAuthorizationRequest request) {
+    // Actualizar estado de la tarjeta (SOLO AQUÍ)
+    double newAvailableCredit = card.getAvailableCredit().doubleValue() - request.getAmount();
+    card.setAvailableCredit(BigDecimal.valueOf(newAvailableCredit));
+    card.setCurrentBalance(card.getCurrentBalance().add(BigDecimal.valueOf(request.getAmount())));
+
+    String authCode = generateAuthCode();
+
+    // Guardar tarjeta y crear transacción
+    /*return creditCardRepository.save(card)
+      .flatMap(savedCard -> createTransactionRecord(savedCard, request, authCode)
+        .then(Mono.fromCallable(() -> createApprovedResponse(savedCard, request.getAmount(), authCode)))
+        .onErrorResume(transactionError -> {
+          // Si falla la creación de la transacción, log el error pero continúa
+          log.error("Error creating transaction record for cardId={}, authCode={}",
+            savedCard.getId(), authCode, transactionError);
+          return Mono.just(createApprovedResponse(savedCard, request.getAmount(), authCode));
+        })
+      )
       .doOnSuccess(response -> log.info("Cargo autorizado: cardId={}, authCode={}, newCredit={}",
-        card.getId(), response.getAuthorizationCode(), newAvailableCredit));
+        card.getId(), authCode, newAvailableCredit));*/
+    return creditCardRepository.save(card)
+      .map(savedCard -> createApprovedResponse(savedCard, request.getAmount(), authCode));
+  }
+
+  private Mono<Void> createTransactionRecord(CreditCard card, ChargeAuthorizationRequest request, String authCode) {
+    TransactionCreateRequest transactionRequest = buildTransactionRequest(card, request, authCode);
+
+    return transactionServiceClient.createTransaction(transactionRequest)
+      .then(); // Convertir a Mono<Void> ya que solo nos interesa que se complete
+  }
+
+  // Método helper para crear el TransactionCreateRequest
+  private TransactionCreateRequest buildTransactionRequest(CreditCard card, ChargeAuthorizationRequest request, String authCode) {
+    TransactionCreateRequest transactionRequest = new TransactionCreateRequest();
+    transactionRequest.setCardId(card.getId());
+    transactionRequest.setAmount(request.getAmount());
+    transactionRequest.setTransactionType("CHARGE");
+    transactionRequest.setAuthorizationCode(authCode);
+    transactionRequest.setStatus("APPROVED");
+    transactionRequest.setTimestamp(OffsetDateTime.now());
+    return transactionRequest;
+  }
+
+  private ChargeAuthorizationResponse createApprovedResponse(CreditCard card, Double amount, String authCode) {
+    ChargeAuthorizationResponse response = new ChargeAuthorizationResponse();
+    response.setAuthorizationCode(authCode);
+    response.setStatus(ChargeAuthorizationResponse.StatusEnum.APPROVED);
+    response.setAuthorizedAmount(amount);
+    response.setAvailableCreditAfter(card.getAvailableCredit().doubleValue());
+    response.setProcessedAt(OffsetDateTime.now());
+    return response;
   }
 
   private ChargeAuthorizationResponse createDeclinedResponse(Double availableCredit, String reason) {
@@ -213,7 +255,8 @@ public class CardServiceImpl implements CardService {
       .switchIfEmpty(Mono.just(candidate)); // si no existe, úsalo
   }
 
-  private String generateRandomCardNumber() {
+  @Override
+  public String generateRandomCardNumber() {
     StringBuilder sb = new StringBuilder();
     for (int i = 0; i < 16; i++) {
       sb.append(random.nextInt(10));
@@ -252,7 +295,7 @@ public class CardServiceImpl implements CardService {
   public Mono<CustomerCardValidationResponse> getCustomerCardValidation(String customerId) {
     log.debug("Validating customer cards for customer: {}", customerId);
 
-    return creditCardRepository.findByIsActiveAndCustomerId(true, customerId)
+    return creditCardRepository.findByIsActiveAndCustomerIdAndType(true, customerId,CardType.CREDIT)
       .collectList()
       .map(activeCards -> buildCustomerValidationResponse(customerId, activeCards))
       .doOnSuccess(response -> log.debug("Customer validation completed for {}: hasActiveCard={}",
@@ -266,7 +309,7 @@ public class CardServiceImpl implements CardService {
     LocalDate today = LocalDate.now();
     log.info("Starting daily balance capture for date: {}", today);
 
-    return creditCardRepository.findByIsActive(true)
+    return creditCardRepository.findByIsActiveAndType(true,CardType.CREDIT)
       .flatMap(card -> captureCardBalanceForDate(card, today))
       .then()
       .doOnSuccess(v -> log.info("Daily balance capture completed for date: {}", today))
@@ -279,7 +322,7 @@ public class CardServiceImpl implements CardService {
       .flatMap(exists -> {
         if (exists) {
           log.debug("Balance already captured for card {} on date {}", card.getId(), date);
-          return Mono.<Void>empty();
+          return Mono.empty();
         }
 
         DailyBalance dailyBalance = new DailyBalance();
@@ -394,6 +437,90 @@ public class CardServiceImpl implements CardService {
     summary.setAvailableCredit(card.getAvailableCredit().doubleValue());
     return summary;
   }
+
+  @Override
+  public Mono<ProductEligibilityResponse> checkCustomerProductEligibility(String customerId) {
+    log.debug("Checking product eligibility for customer: {}", customerId);
+
+    /*return customerServiceClient.getCustomer(customerId)
+      .flatMap(customer -> getCustomerEligibilityStatus(customerId))
+      .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",
+        customerId, response.getIsEligible()))
+      .doOnError(error -> log.error("Error checking eligibility for customer {}: {}",
+        customerId, error.getMessage()));*/
+
+    // Para pruebas locales, omite la llamada externa:
+    return getCustomerEligibilityStatus(customerId)
+      .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",
+        customerId, response.getIsEligible()))
+      .doOnError(error -> log.error("Error checking eligibility for customer {}: {}",
+        customerId, error.getMessage()));
+  }
+
+  private Mono<ProductEligibilityResponse> getCustomerEligibilityStatus(String customerId) {
+    return getOverdueCreditProducts(customerId)
+      .collectList()
+      .map(overdueProducts -> buildEligibilityResponse(customerId, overdueProducts));
+  }
+
+  private Flux<OverdueProduct> getOverdueCreditProducts(String customerId) {
+    log.debug("Checking overdue credit products for customer: {}", customerId);
+
+    return creditCardRepository.findByCustomerId(customerId)
+      .filter(creditCard -> Boolean.TRUE.equals(creditCard.getIsOverdue()))
+      .map(this::mapToOverdueProduct)
+      .doOnNext(overdueProduct -> log.debug("Found overdue product: {} for customer: {}",
+        overdueProduct.getProductId(), customerId));
+  }
+
+  private ProductEligibilityResponse buildEligibilityResponse(String customerId, List<OverdueProduct> overdueProducts) {
+    ProductEligibilityResponse response = new ProductEligibilityResponse();
+    response.setCustomerId(customerId);
+    response.setIsEligible(overdueProducts.isEmpty());
+    response.setValidatedAt(OffsetDateTime.now());
+
+    if (overdueProducts.isEmpty()) {
+      response.setEligibilityReasons(List.of("NO_OVERDUE_DEBTS"));
+      response.setIneligibilityReasons(List.of()); // Lista vacía para MVP
+      response.setOverdueProducts(List.of());
+    } else {
+      response.setEligibilityReasons(List.of());
+      response.setIneligibilityReasons(List.of("OVERDUE_CREDIT_DEBT"));
+      response.setOverdueProducts(overdueProducts);
+    }
+
+    return response;
+  }
+
+  private OverdueProduct mapToOverdueProduct(CreditCard creditCard) {
+    OverdueProduct overdueProduct = new OverdueProduct();
+    overdueProduct.setProductId(creditCard.getId());
+    overdueProduct.setProductType(OverdueProduct.ProductTypeEnum.CREDIT_CARD);
+    overdueProduct.setOverdueAmount(creditCard.getMinimumPayment() != null ?
+      creditCard.getMinimumPayment().doubleValue() : creditCard.getCurrentBalance().doubleValue());
+    overdueProduct.setDaysPastDue(creditCard.getOverdueDays() != null ? creditCard.getOverdueDays() : 0);
+    return overdueProduct;
+  }
+
+  // Método auxiliar que puedes llamar periódicamente o al consultar
+  public Mono<Void> updateOverdueStatus(String creditCardId) {
+    return creditCardRepository.findById(creditCardId)
+      .flatMap(creditCard -> {
+        if (creditCard.getPaymentDueDate() != null) {
+          LocalDate today = LocalDate.now();
+          boolean isOverdue = today.isAfter(creditCard.getPaymentDueDate());
+          int overdueDays = isOverdue ?
+            (int) creditCard.getPaymentDueDate().until(today, ChronoUnit.DAYS) : 0;
+
+          creditCard.setIsOverdue(isOverdue);
+          creditCard.setOverdueDays(overdueDays);
+
+          return creditCardRepository.save(creditCard);
+        }
+        return Mono.just(creditCard);
+      })
+      .then();
+  }
   //Validaciones
   private Mono<Void> validateCreditCreation(String customerId, String customerType) {
     // Validar reglas de negocio según el tipo
@@ -503,5 +630,14 @@ public class CardServiceImpl implements CardService {
     response.setUtilizationPercentage(utilizationPercentage.doubleValue());
     response.setIsActive(card.isActive());
     return response;
+  }
+  @Override
+  public Mono<Integer> getActiveCardsCount() {
+    log.debug("Getting total count of active credit cards");
+
+    return creditCardRepository.countByIsActiveAndType(true,CardType.CREDIT)
+      .map(Long::intValue)
+      .doOnSuccess(count -> log.debug("Found {} active credit cards", count))
+      .doOnError(error -> log.error("Error counting active credit cards: {}", error.getMessage()));
   }
 }

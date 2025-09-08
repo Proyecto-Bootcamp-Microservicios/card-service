@@ -16,6 +16,18 @@ import java.time.OffsetDateTime;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+  @ExceptionHandler(CardServiceException.class)
+  public Mono<ResponseEntity<ErrorResponse>> handleCardServiceException(CardServiceException ex) {
+    log.warn("Card service exception: {} - {}", ex.getErrorCode(), ex.getMessage());
+
+    ErrorResponse errorResponse = new ErrorResponse();
+    errorResponse.setCode(ex.getErrorCode());
+    errorResponse.setMessage(ex.getMessage());
+    errorResponse.setTimestamp(OffsetDateTime.now());
+
+    return Mono.just(ResponseEntity.status(ex.getHttpStatus()).body(errorResponse));
+  }
+
   @ExceptionHandler(BusinessRuleException.class)
   public Mono<ResponseEntity<ErrorResponse>> handleBusinessRuleException(BusinessRuleException ex) {
     log.warn("Business rule violation: {} - {}", ex.getCode(), ex.getMessage());
@@ -110,6 +122,7 @@ public class GlobalExceptionHandler {
     return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse));
   }
 
+  // 2. Handlers MÁS GENERALES al final (ESTE DEBE SER EL ÚLTIMO)
   @ExceptionHandler(Exception.class)
   public Mono<ResponseEntity<ErrorResponse>> handleGenericException(Exception ex) {
     log.error("Unexpected exception: {}", ex.getMessage(), ex);

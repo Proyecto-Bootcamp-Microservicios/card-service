@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Field;
 
 import javax.validation.constraints.*;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -16,8 +17,8 @@ import java.math.BigDecimal;
 public class CreditCard extends Card {
 
   @NotNull(message = "El tipo de tarjeta de crédito es obligatorio")
-  @Field("type")
-  private CreditCardType creditCardtype; // PERSONAL, ENTERPRISE
+  @Field("creditCardType")
+  private CreditCardType creditCardType; // PERSONAL, ENTERPRISE
 
   @NotNull(message = "El límite de crédito es obligatorio")
   @DecimalMin(value = "0.01", message = "El límite de crédito debe ser mayor a 0")
@@ -34,6 +35,17 @@ public class CreditCard extends Card {
   @Field("currentBalance")
   private BigDecimal currentBalance;
 
+  @Field("paymentDueDate")
+  private LocalDate paymentDueDate;
+
+  @Field("minimumPayment")
+  private BigDecimal minimumPayment;
+
+  @Field("isOverdue")
+  private Boolean isOverdue;
+
+  @Field("overdueDays")
+  private Integer overdueDays;
   @Override
   public CardType getCardType() {
     return CardType.CREDIT;

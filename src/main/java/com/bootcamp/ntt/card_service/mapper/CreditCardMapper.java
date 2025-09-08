@@ -23,7 +23,7 @@ public class CreditCardMapper {
     CreditCard card = new CreditCard();
     card.setCardNumber(cardNumber);
     card.setCustomerId(dto.getCustomerId());
-    card.setCreditCardtype(CreditCardType.valueOf(customerType));
+    card.setCreditCardType(CreditCardType.valueOf(customerType));
     card.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));
     card.setAvailableCredit(
       dto.getAvailableCredit() != null ? BigDecimal.valueOf(dto.getAvailableCredit()) : BigDecimal.ZERO
@@ -69,12 +69,15 @@ public class CreditCardMapper {
     response.setId(entity.getId());
     response.setCardNumber(entity.getCardNumber());
     response.setCustomerId(entity.getCustomerId());
-    response.setCreditCardType(CreditCardResponse.CreditCardTypeEnum.valueOf(entity.getType().name()));
+    response.setCreditCardType(CreditCardResponse.CreditCardTypeEnum.valueOf(entity.getCreditCardType().name()));
     response.setCreditLimit(entity.getCreditLimit().doubleValue());
     response.setAvailableCredit(entity.getAvailableCredit().doubleValue());
     response.setCurrentBalance(entity.getCurrentBalance().doubleValue());
     response.setIsActive(entity.isActive());
-
+    response.setPaymentDueDate(entity.getPaymentDueDate());
+    response.setMinimumPayment(entity.getMinimumPayment().doubleValue());
+    response.setIsOverdue(entity.getIsOverdue());
+    response.setOverdueDays(entity.getOverdueDays());
     response.setCreatedAt(entity.getCreatedAt() != null ? entity.getCreatedAt().atOffset(ZoneOffset.UTC) : null);
     response.setUpdatedAt(entity.getUpdatedAt() != null ? entity.getUpdatedAt().atOffset(ZoneOffset.UTC) : null);
 

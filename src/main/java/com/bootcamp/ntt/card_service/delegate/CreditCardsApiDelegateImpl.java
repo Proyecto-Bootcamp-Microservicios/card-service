@@ -2,7 +2,7 @@ package com.bootcamp.ntt.card_service.delegate;
 
 import com.bootcamp.ntt.card_service.api.CreditCardsApiDelegate;
 import com.bootcamp.ntt.card_service.model.*;
-import com.bootcamp.ntt.card_service.service.CardService;
+import com.bootcamp.ntt.card_service.service.CreditCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -17,7 +17,7 @@ import reactor.core.publisher.Mono;
 @RequiredArgsConstructor
 public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
-  private final CardService cardService;
+  private final CreditCardService creditCardService;
 
   /**
    * POST /cards : Create a new card
@@ -31,7 +31,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     return cardRequest
       .doOnNext(request -> log.info("Creating card for customer: {}", request.getCustomerId()))
-      .flatMap(cardService::createCard)
+      .flatMap(creditCardService::createCard)
       .map(response -> {
         log.info("Card created successfully with ID: {}", response.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -50,8 +50,8 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     Boolean activeFilter = (isActive != null) ? isActive : true;
 
     Flux<CreditCardResponse> cards = (customerId != null)
-      ? cardService.getCardsByActiveAndCustomer(activeFilter, customerId)
-      : cardService.getCardsByActive(activeFilter);
+      ? creditCardService.getCardsByActiveAndCustomer(activeFilter, customerId)
+      : creditCardService.getCardsByActive(activeFilter);
 
     cards = cards.doOnComplete(() -> log.info("Cards retrieved successfully"));
 
@@ -68,7 +68,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Getting card by ID: {}", id);
 
-    return cardService
+    return creditCardService
       .getCardById(id)
       .map(response -> {
         log.info("Card found: {}", response.getId());
@@ -93,7 +93,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     return cardRequest
       .doOnNext(request -> log.info("Update request for card ID: {}", id))
-      .flatMap(request -> cardService.updateCard(id, request))
+      .flatMap(request -> creditCardService.updateCard(id, request))
       .map(response -> {
         log.info("Card updated successfully: {}", response.getId());
         return ResponseEntity.ok(response);
@@ -110,7 +110,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Deleting card with ID: {}", id);
 
-    return cardService
+    return creditCardService
       .deleteCard(id)
       .then(Mono.fromCallable(() -> {
         log.info("Card deleted successfully: {}", id);
@@ -128,7 +128,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Deactivating card with ID: {}", id);
 
-    return cardService
+    return creditCardService
       .deactivateCard(id)
       .map(response -> {
         log.info("Card deactivated successfully: {}", response.getId());
@@ -146,7 +146,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Activating card with ID: {}", id);
 
-    return cardService
+    return creditCardService
       .activateCard(id)
       .map(response -> {
         log.info("Card activated successfully: {}", response.getId());
@@ -166,7 +166,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     log.info("Authorizing charge for card ID: {}", cardNumber);
 
     return chargeAuthorizationRequest
-      .flatMap(request -> cardService.authorizeCharge(cardNumber, request))
+      .flatMap(request -> creditCardService.authorizeCharge(cardNumber, request))
       .map(response -> {
         log.info("Charge authorized for card {}", cardNumber);
         return ResponseEntity.ok(response);
@@ -185,7 +185,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     log.info("Processing payment for card: {}", cardNumber);
     return paymentProcessRequest
       .doOnNext(request -> log.info("Payment request for card {}: amount {}", cardNumber, request.getAmount()))
-      .flatMap(request -> cardService.processPayment(cardNumber, request))
+      .flatMap(request -> creditCardService.processPayment(cardNumber, request))
       .map(response -> {
         if (response.getSuccess()) {
           log.info("Payment processed successfully for card {}: paid {}",
@@ -206,7 +206,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     String cardNumber,
     ServerWebExchange exchange) {
     log.info("Getting balance for card: {}", cardNumber);
-    return cardService.getCardBalance(cardNumber)
+    return creditCardService.getCardBalance(cardNumber)
       .map(response -> {
         log.info("Balance retrieved for card {}: available {}, current {}",
           cardNumber, response.getAvailableCredit(), response.getCurrentBalance());
@@ -224,7 +224,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Checking active cards for customer: {}", customerId);
 
-    return cardService
+    return creditCardService
       .getCustomerCardValidation(customerId)
       .map(response -> {
         log.info("Customer validation completed for {}: hasActiveCard={}, count={}",
@@ -246,7 +246,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Getting daily averages for customer: {} for {}/{}", customerId, month, year);
 
-    return cardService
+    return creditCardService
       .getCustomerDailyAverages(customerId, year, month)
       .map(response -> {
         log.info("Daily averages retrieved for customer {}: {} products found",
@@ -259,4 +259,6 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
       }))
       .doOnError(error -> log.error("Error getting daily averages for customer {}: {}", customerId, error.getMessage()));
   }
+
+
 }

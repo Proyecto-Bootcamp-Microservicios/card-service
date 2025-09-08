@@ -531,15 +531,23 @@ paths:
               $ref: '#/components/schemas/AssociateAccountRequest'
       responses:
         '200':
-          description: Account associated successfully
+          description: Invalid account or already associated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DebitCardResponse'
         '400':
-          description: Invalid account or already associated
+          description: Insufficient credit or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /debit-cards/{id}/disassociate-account:
     delete:
@@ -688,6 +696,37 @@ paths:
                 $ref: '#/components/schemas/CustomerCardsSummaryResponse'
         '404':
           description: Customer not found
+  /cards/reports/period:
+    get:
+      summary: Generate cards report for specific period
+      description: Returns aggregated statistics for all card types in specified period
+      operationId: generateCardsPeriodicReport
+      parameters:
+        - name: startDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: endDate
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cards report generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CardsPeriodicReportResponse'
+        '400':
+          description: Invalid date range
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 components:
   schemas:
     CreditCardCreateRequest:
@@ -763,6 +802,24 @@ components:
           minimum: 0.01
           description: Amount to charge
           example: 150.00
+        transactionType:
+          type: string
+          description: Transaction type (e.g., CHARGE or PAYMENT)
+          example: "CHARGE"
+        authorizationCode:
+          type: string
+          description: Authorization code generated
+          example: "AUTH123456"
+        status:
+          type: string
+          description: Transaction status (e.g., APPROVED)
+          example: "APPROVED"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the transaction occurred
+          example: "2025-09-07T15:45:00Z"
+
 
     PaymentProcessRequest:
       type: object
@@ -895,6 +952,24 @@ components:
         isActive:
           type: boolean
           example: true
+        paymentDueDate:
+          type: string
+          format: date
+          example: "2025-09-15"
+          description: "Payment due date"
+        minimumPayment:
+          type: number
+          format: double
+          example: 200.00
+          description: "Minimum required payment"
+        isOverdue:
+          type: boolean
+          example: false
+          description: "Indicates whether the card has overdue payments"
+        overdueDays:
+          type: integer
+          example: 0
+          description: "Number of overdue days"
         createdAt:
           type: string
           format: date-time
@@ -1068,6 +1143,14 @@ components:
         isActive:
           type: boolean
           example: true
+        primaryAccountId:
+          type: string
+          example: "acc_123456789"
+        associatedAccountIds:
+          type: array
+          items:
+            type: string
+          example: [ "acc_987654321", "acc_456789123" ]
       required:
         - isActive
 
@@ -1306,21 +1389,24 @@ components:
         overdueProducts:
           type: array
           items:
-            type: object
-            properties:
-              productId:
-                type: string
-              productType:
-                type: string
-                enum: [ "CREDIT_CARD" ]
-              overdueAmount:
-                type: number
-                format: double
-              daysPastDue:
-                type: integer
+            $ref: '#/components/schemas/OverdueProduct'
         validatedAt:
           type: string
           format: date-time
+
+    OverdueProduct:
+      type: object
+      properties:
+        productId:
+          type: string
+        productType:
+          type: string
+          enum: [ "CREDIT_CARD" ]
+        overdueAmount:
+          type: number
+          format: double
+        daysPastDue:
+          type: integer
 
     CustomerCardsSummaryResponse:
       type: object
@@ -1332,48 +1418,138 @@ components:
       properties:
         customerId:
           type: string
-          example: "68a0cdde7d68c910da0bc239"
         creditCards:
           type: array
           items:
-            type: object
-            properties:
-              cardId:
-                type: string
-              cardNumber:
-                type: string
-              creditLimit:
-                type: number
-                format: double
-              availableCredit:
-                type: number
-                format: double
-              currentBalance:
-                type: number
-                format: double
-              isActive:
-                type: boolean
+            $ref: '#/components/schemas/CreditCardSummary'
         debitCards:
           type: array
           items:
-            type: object
-            properties:
-              cardId:
-                type: string
-              cardNumber:
-                type: string
-              primaryAccountId:
-                type: string
-              associatedAccountsCount:
-                type: integer
-              isActive:
-                type: boolean
+            $ref: '#/components/schemas/DebitCardSummary'
         totalActiveCards:
           type: integer
-          example: 3
         retrievedAt:
           type: string
           format: date-time
+
+    CreditCardSummary:
+      type: object
+      properties:
+        cardId:
+          type: string
+        cardNumber:
+          type: string
+        availableCredit:
+          type: number
+        currentBalance:
+          type: number
+        isActive:
+          type: boolean
+
+    DebitCardSummary:
+      type: object
+      properties:
+        cardId:
+          type: string
+        cardNumber:
+          type: string
+        primaryAccountId:
+          type: string
+        isActive:
+          type: boolean
+
+    AssociatedAccount:
+      type: object
+      required:
+        - accountId
+        - associationDate
+      properties:
+        accountId:
+          type: string
+        associationDate:
+          type: string
+          format: date-time
+
+    CreditProduct:
+      type: object
+      properties:
+        productId:
+          type: string
+        productType:
+          type: string
+        overdueAmount:
+          type: number
+          format: double
+        daysPastDue:
+          type: integer
+
+    CardsPeriodicReportResponse:
+      type: object
+      required:
+        - reportPeriod
+        - creditCards
+        - debitCards
+        - generatedAt
+      properties:
+        reportPeriod:
+          type: object
+          properties:
+            startDate:
+              type: string
+              format: date
+            endDate:
+              type: string
+              format: date
+        creditCards:
+          $ref: '#/components/schemas/CreditCardsReport'
+        debitCards:
+          $ref: '#/components/schemas/DebitCardsReport'
+        generatedAt:
+          type: string
+          format: date-time
+
+    CreditCardsReport:
+      type: object
+      properties:
+        totalActiveCards:
+          type: integer
+        totalTransactions:
+          type: integer
+        totalAmountTransacted:
+          type: number
+          format: double
+        averageCreditUtilization:
+          type: number
+          format: double
+
+    DebitCardsReport:
+      type: object
+      properties:
+        totalActiveCards:
+          type: integer
+        totalTransactions:
+          type: integer
+        totalAmountTransacted:
+          type: number
+          format: double
+
+    TransactionsSummary:
+      type: object
+      required:
+        - totalTransactions
+        - totalAmount
+      properties:
+        totalTransactions:
+          type: integer
+        totalAmount:
+          type: number
+          format: double
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
 
     ErrorResponse:
       type: object
