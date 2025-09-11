@@ -1,0 +1,143 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+  "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
+  "https://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+
+<module name="Checker">
+  <!-- Configuración básica -->
+  <property name="charset" value="UTF-8"/>
+  <property name="severity" value="warning"/>
+  <property name="fileExtensions" value="java, properties, xml"/>
+
+  <!-- Suprimir violaciones -->
+  <module name="SuppressionFilter">
+    <property name="file" value="checkstyle-suppressions.xml"/>
+    <property name="optional" value="false"/>
+  </module>
+
+  <!-- Tamaño de archivo -->
+  <module name="FileLength">
+    <property name="max" value="2000"/>
+  </module>
+
+  <!-- MOVER LineLength AQUÍ - fuera de TreeWalker -->
+  <module name="LineLength">
+    <property name="max" value="120"/>
+    <property name="ignorePattern" value="^package.*|^import.*|a href|href|http://|https://|ftp://"/>
+  </module>
+
+  <!-- Espacios en blanco -->
+  <module name="FileTabCharacter"/>
+
+  <!-- Líneas vacías al final del archivo -->
+  <module name="NewlineAtEndOfFile"/>
+
+  <module name="TreeWalker">
+    <!-- Importaciones -->
+    <module name="AvoidStarImport"/>
+    <module name="IllegalImport"/>
+    <module name="RedundantImport"/>
+    <module name="UnusedImports"/>
+    <module name="ImportOrder">
+      <property name="groups" value="/^java\./,javax,org,com"/>
+      <property name="ordered" value="true"/>
+      <property name="separated" value="true"/>
+      <property name="option" value="bottom"/>
+      <property name="sortStaticImportsAlphabetically" value="true"/>
+    </module>
+
+    <!-- REMOVER LineLength de aquí -->
+
+    <module name="MethodLength">
+      <property name="max" value="150"/>
+    </module>
+    <module name="ParameterNumber">
+      <property name="max" value="8"/>
+    </module>
+
+    <!-- Espacios en blanco -->
+    <module name="EmptyForIteratorPad"/>
+    <module name="GenericWhitespace"/>
+    <module name="MethodParamPad"/>
+    <module name="NoWhitespaceAfter"/>
+    <module name="NoWhitespaceBefore"/>
+    <module name="OperatorWrap"/>
+    <module name="ParenPad"/>
+    <module name="TypecastParenPad"/>
+    <module name="WhitespaceAfter"/>
+    <module name="WhitespaceAround"/>
+
+    <!-- Modificadores -->
+    <module name="ModifierOrder"/>
+    <module name="RedundantModifier"/>
+
+    <!-- Bloques -->
+    <module name="AvoidNestedBlocks"/>
+    <module name="EmptyBlock"/>
+    <module name="LeftCurly"/>
+    <module name="NeedBraces"/>
+    <module name="RightCurly"/>
+
+    <!-- Problemas de codificación comunes -->
+    <module name="EmptyStatement"/>
+    <module name="EqualsHashCode"/>
+    <module name="HiddenField">
+      <property name="ignoreSetter" value="true"/>
+      <property name="ignoreConstructorParameter" value="true"/>
+    </module>
+    <module name="IllegalInstantiation"/>
+    <module name="InnerAssignment"/>
+    <module name="MagicNumber">
+      <property name="ignoreNumbers" value="-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10"/>
+      <property name="ignoreHashCodeMethod" value="true"/>
+      <property name="ignoreAnnotation" value="true"/>
+      <property name="ignoreFieldDeclaration" value="true"/>
+    </module>
+    <module name="MissingSwitchDefault"/>
+    <module name="SimplifyBooleanExpression"/>
+    <module name="SimplifyBooleanReturn"/>
+
+    <!-- Diseño de clases -->
+    <module name="FinalClass"/>
+    <module name="HideUtilityClassConstructor"/>
+    <module name="InterfaceIsType"/>
+    <module name="VisibilityModifier">
+      <property name="protectedAllowed" value="true"/>
+      <property name="packageAllowed" value="true"/>
+      <property name="allowPublicFinalFields" value="true"/>
+      <property name="allowPublicImmutableFields" value="true"/>
+    </module>
+
+    <!-- Misceláneo -->
+    <module name="ArrayTypeStyle"/>
+    <module name="TodoComment">
+      <property name="severity" value="info"/>
+    </module>
+    <module name="UpperEll"/>
+
+    <!-- Convenciones de nomenclatura -->
+    <module name="ConstantName"/>
+    <module name="LocalFinalVariableName"/>
+    <module name="LocalVariableName"/>
+    <module name="MemberName"/>
+    <module name="MethodName"/>
+    <module name="PackageName"/>
+    <module name="ParameterName"/>
+    <module name="StaticVariableName"/>
+    <module name="TypeName"/>
+
+    <!-- Javadoc (relajado para MVP) -->
+    <module name="JavadocMethod">
+      <property name="severity" value="ignore"/>
+    </module>
+    <module name="JavadocType">
+      <property name="severity" value="ignore"/>
+    </module>
+    <module name="JavadocVariable">
+      <property name="severity" value="ignore"/>
+    </module>
+    <module name="JavadocStyle">
+      <property name="severity" value="ignore"/>
+    </module>
+  </module>
+</module>

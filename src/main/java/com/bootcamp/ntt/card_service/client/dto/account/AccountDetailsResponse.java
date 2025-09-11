@@ -8,4 +8,5 @@ public class AccountDetailsResponse {
   private String accountType; // "SAVINGS", "CHECKING"
   private String currency;
   private OffsetDateTime lastTransactionDate;
+  private OffsetDateTime lastMovementDate;
 }

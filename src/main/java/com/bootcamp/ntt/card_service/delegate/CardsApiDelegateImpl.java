@@ -31,8 +31,8 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
    * Genera un reporte periódico consolidado de tarjetas (crédito y débito) para el rango de fechas especificado.
    *
    * @param startDate Fecha de inicio del periodo (inclusive)
-   * @param endDate Fecha de fin del periodo (inclusive)
-   * @param exchange Contexto del servidor web
+   * @param endDate   Fecha de fin del periodo (inclusive)
+   * @param exchange  Contexto del servidor web
    * @return Mono con ResponseEntity que contiene el reporte consolidado o error
    */
   @Override
@@ -52,5 +52,17 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
         log.error("Error generating cards periodic report: {}", error.getMessage());
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
       });
+  }
+
+  @Override
+  public Mono<ResponseEntity<CardMovementsResponse>> getCardMovements(
+    String cardId,
+    Integer limit,
+    ServerWebExchange exchange) {
+
+    log.info("Getting movements for card: {} with limit: {}", cardId, limit);
+
+    return cardConsolidationService.getCardMovements(cardId, limit)
+      .map(ResponseEntity::ok);
   }
 }

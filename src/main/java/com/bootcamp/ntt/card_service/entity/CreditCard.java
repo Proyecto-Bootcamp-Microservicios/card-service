@@ -1,4 +1,5 @@
 package com.bootcamp.ntt.card_service.entity;
+
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.enums.CreditCardType;
 import lombok.*;
@@ -46,6 +47,7 @@ public class CreditCard extends Card {
 
   @Field("overdueDays")
   private Integer overdueDays;
+
   @Override
   public CardType getCardType() {
     return CardType.CREDIT;

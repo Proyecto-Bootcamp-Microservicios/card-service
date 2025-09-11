@@ -8,24 +8,19 @@ import com.bootcamp.ntt.card_service.client.dto.transaction.*;
 import com.bootcamp.ntt.card_service.entity.DebitCard;
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.exception.*;
-import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.repository.DebitCardRepository;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
+import com.bootcamp.ntt.card_service.utils.CardUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-
-import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,18 +29,11 @@ public class DebitCardServiceImpl implements DebitCardService {
 
   private final DebitCardRepository debitCardRepository;
   private final AccountServiceClient accountServiceClient;
-  private final CustomerServiceClient customerServiceClient;
   private final TransactionServiceClient transactionServiceClient;
-  private final CreditCardService creditCardService;
-  private final CreditCardMapper creditCardMapper;
   private final DebitCardMapper debitCardMapper;
+  private final CardUtils cardUtils;
 
-  @Override
-  public Flux<DebitCardResponse> getAllDebitCards(Boolean isActive) {
-    return debitCardRepository.findAll()
-      .map(debitCardMapper::toResponse)
-      .doOnComplete(() -> log.debug("Cards retrieved"));
-  }
+
 
   @Override
   public Flux<DebitCardResponse> getDebitCardsByActive(Boolean isActive) {
@@ -56,7 +44,7 @@ public class DebitCardServiceImpl implements DebitCardService {
 
   @Override
   public Flux<DebitCardResponse> getDebitCardsByActiveAndCustomer(Boolean isActive, String customerId) {
-    return debitCardRepository.findByIsActiveAndCustomerIdAndType(isActive, customerId,CardType.DEBIT)
+    return debitCardRepository.findByIsActiveAndCustomerIdAndType(isActive, customerId, CardType.DEBIT)
       .map(debitCardMapper::toResponse)
       .doOnComplete(() -> log.debug("Cards active by customer retrieved"));
   }
@@ -83,8 +71,7 @@ public class DebitCardServiceImpl implements DebitCardService {
       .map(cardNumber -> debitCardMapper.toEntity(cardRequest, cardNumber))
       .flatMap(debitCardRepository::save)
       .map(debitCardMapper::toResponse)
-      .doOnSuccess(response -> log.debug("Debit card created with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error creating debit card: {}", error.getMessage()));
+      .doOnSuccess(response -> log.debug("Debit card created with ID: {}", response.getId()));
   }
 
   @Override
@@ -96,8 +83,7 @@ public class DebitCardServiceImpl implements DebitCardService {
       .map(existing -> debitCardMapper.updateEntity(existing, cardRequest))
       .flatMap(debitCardRepository::save)
       .map(debitCardMapper::toResponse)
-      .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()))
-      .doOnError(error -> log.error("Error updating card {}: {}", id, error.getMessage()));
+      .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()));
   }
 
   @Override
@@ -105,8 +91,7 @@ public class DebitCardServiceImpl implements DebitCardService {
     return debitCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Debit card not found")))
       .flatMap(debitCardRepository::delete)
-      .doOnSuccess(unused -> log.debug("Card deleted"))
-      .doOnError(error -> log.error("Error deleting card {}: {}", id, error.getMessage()));
+      .doOnSuccess(unused -> log.debug("Card deleted"));
   }
 
   @Override
@@ -118,8 +103,7 @@ public class DebitCardServiceImpl implements DebitCardService {
         return debitCardRepository.save(card);
       })
       .map(debitCardMapper::toResponse)
-      .doOnSuccess(c -> log.debug("Card {} deactivated", id))
-      .doOnError(e -> log.error("Error deactivating card {}: {}", id, e.getMessage()));
+      .doOnSuccess(c -> log.debug("Card {} deactivated", id));
   }
 
   @Override
@@ -131,8 +115,7 @@ public class DebitCardServiceImpl implements DebitCardService {
         return debitCardRepository.save(card);
       })
       .map(debitCardMapper::toResponse)
-      .doOnSuccess(c -> log.debug("Card {} activated", id))
-      .doOnError(e -> log.error("Error activating card {}: {}", id, e.getMessage()));
+      .doOnSuccess(c -> log.debug("Card {} activated", id));
   }
 
   @Override
@@ -226,10 +209,9 @@ public class DebitCardServiceImpl implements DebitCardService {
         .then(validateAmount(request.getAmount()))
         .then(processCascadePayment(debitCard, request.getAmount()))
         .flatMap(accountsUsed -> createTransactionInTransactionService(debitCard, request, accountsUsed)
-          .map(transaction -> buildDebitPurchaseResponse(debitCard, request, accountsUsed, transaction)))
+          .map(transaction -> debitCardMapper.toDebitPurchaseResponse(debitCard, request, accountsUsed, transaction)))
       )
-      .doOnSuccess(response -> log.debug("Purchase processed successfully for card: {}", cardNumber))
-      .doOnError(error -> log.error("Error processing purchase for card {}: {}", cardNumber, error.getMessage()));
+      .doOnSuccess(response -> log.debug("Purchase processed successfully for card: {}", cardNumber));
   }
 
   private Mono<Void> validateDebitCard(DebitCard debitCard) {
@@ -298,6 +280,7 @@ public class DebitCardServiceImpl implements DebitCardService {
         return Mono.just(accountUsage);
       });
   }
+
   private Mono<List<String>> getOrderedAccounts(DebitCard debitCard) {
     List<String> orderedAccounts = new ArrayList<>();
 
@@ -315,65 +298,17 @@ public class DebitCardServiceImpl implements DebitCardService {
   private Mono<String> createTransactionInTransactionService(DebitCard debitCard,
                                                              DebitPurchaseRequest request,
                                                              List<AccountUsage> accountsUsed) {
-    TransactionCreateRequest transactionRequest = new TransactionCreateRequest();
-    transactionRequest.setCardId(debitCard.getId());
-    transactionRequest.setAmount(request.getAmount());
-    transactionRequest.setTransactionType(mapTransactionType(request.getTransactionType()));
-    transactionRequest.setStatus("APPROVED");
-    transactionRequest.setTimestamp(OffsetDateTime.now());
-
-    // Para MVP, podemos agregar info básica en descripción
-    /*String description = String.format("%s - %s accounts used",
-      request.getTransactionType(), accountsUsed.size());
-    transactionRequest.setDescription(description);*/
+    TransactionRequest transactionRequest = debitCardMapper.toTransactionRequest(
+      debitCard, request, accountsUsed, cardUtils.generateAuthCode());
 
     return transactionServiceClient.createTransaction(transactionRequest)
-      .then(Mono.just(generateTransactionId())); // Devolver un ID para la respuesta
+      .then(Mono.just(generateTransactionId()));// Devolver un ID para la respuesta
+
   }
 
-  private String mapTransactionType(DebitPurchaseRequest.TransactionTypeEnum transactionType) {
-    switch (transactionType) {
-      case PURCHASE: return "DEBIT_PURCHASE";
-      case WITHDRAWAL: return "DEBIT_WITHDRAWAL";
-      case PAYMENT: return "DEBIT_PAYMENT";
-      default: return "DEBIT_TRANSACTION";
-    }
-  }
 
   private String generateTransactionId() {
     return "DTX-" + System.currentTimeMillis();
-  }
-
-  private DebitPurchaseResponse buildDebitPurchaseResponse(DebitCard debitCard,
-                                                           DebitPurchaseRequest request,
-                                                           List<AccountUsage> accountsUsed,
-                                                           String transactionId) {
-    double totalProcessed = accountsUsed.stream()
-      .mapToDouble(AccountUsage::getAmountDeducted)
-      .sum();
-
-    DebitPurchaseResponse response = new DebitPurchaseResponse();
-    response.setSuccess(true);
-    response.setTransactionId(transactionId);
-    response.setCardId(debitCard.getId());
-    response.setRequestedAmount(request.getAmount());
-    response.setProcessedAmount(totalProcessed);
-    response.setProcessedAt(OffsetDateTime.now());
-
-    // Mapear accounts used
-    List<DebitPurchaseResponseAccountsUsedInner> accountsUsedResponse = accountsUsed.stream()
-      .map(usage -> {
-        DebitPurchaseResponseAccountsUsedInner accountUsed = new DebitPurchaseResponseAccountsUsedInner();
-        accountUsed.setAccountId(usage.getAccountId());
-        accountUsed.setAmountDeducted(usage.getAmountDeducted());
-        accountUsed.setRemainingBalance(usage.getRemainingBalance());
-        return accountUsed;
-      })
-      .collect(Collectors.toList());
-
-    response.setAccountsUsed(accountsUsedResponse);
-
-    return response;
   }
 
   @Override
@@ -381,112 +316,22 @@ public class DebitCardServiceImpl implements DebitCardService {
     log.debug("Getting primary account balance for debit card: {}", cardId);
 
     return debitCardRepository.findById(cardId)
-      .switchIfEmpty(Mono.error(new EntityNotFoundException("Debit card not found: " + cardId)))
-      .flatMap(debitCard -> Mono.zip(
-        accountServiceClient.getAccountBalance(debitCard.getPrimaryAccountId()),
-        accountServiceClient.getAccountDetails(debitCard.getPrimaryAccountId())
-      ).map(tuple -> {
-        AccountBalanceResponse accountBalance = tuple.getT1();
-        AccountDetailsResponse accountDetails = tuple.getT2();
+      .switchIfEmpty(Mono.error(new CardServiceException(
+        "DEBIT_CARD_NOT_FOUND",
+        "Debit card not found: " + cardId,
+        HttpStatus.NOT_FOUND)))
+      .flatMap(debitCard -> {
+        String primaryAccountId = debitCard.getPrimaryAccountId();
 
-        PrimaryAccountBalanceResponse response = new PrimaryAccountBalanceResponse();
-        response.setCardId(cardId);
-        response.setPrimaryAccountId(debitCard.getPrimaryAccountId());
-        response.setAccountNumber(accountDetails.getAccountNumber());
-        response.setBalance(accountBalance.getAvailableBalance());
-        response.setCurrency(accountDetails.getCurrency());
-        response.setAccountType(PrimaryAccountBalanceResponse.AccountTypeEnum.valueOf(accountDetails.getAccountType()));
-        return response;
-      }))
-      .doOnSuccess(response -> log.debug("Primary account balance retrieved for card: {}", cardId))
-      .doOnError(error -> log.error("Error getting primary account balance for card {}: {}", cardId, error.getMessage()));
-  }
-
-  public Mono<CardMovementsResponse> getCardMovements(String cardId, Integer limit) {
-    Integer actualLimit = (limit != null && limit <= 50) ? limit : 10;
-    log.debug("Getting last {} movements for card: {}", actualLimit, cardId);
-
-    return determineCardTypeReactive(cardId)
-      .flatMap(cardType ->
-        transactionServiceClient.getLastCardMovements(cardId, actualLimit)
-          .collectList()
-          .map(transactions -> buildCardMovementsResponse(cardId, cardType, transactions))
-      )
-      .doOnSuccess(response -> log.debug("Movements retrieved for card: {}", cardId));
-  }
-
-  private Mono<String> determineCardTypeReactive(String cardId) {
-    return debitCardRepository.findById(cardId)
-      .map(debitCard -> "DEBIT")
-      .switchIfEmpty(
-        creditCardService.getCardById(cardId)
-          .map(creditCard -> "CREDIT")
-          .switchIfEmpty(Mono.error(new CardServiceException(
-            "CARD_NOT_FOUND",
-            "Card not found: " + cardId,
-            HttpStatus.NOT_FOUND)))
-      );
-  }
-
-  private CardMovementsResponse buildCardMovementsResponse(
-    String cardId,
-    String cardType,
-    List<TransactionResponse> transactions) {
-
-    CardMovementsResponse response = new CardMovementsResponse();
-    response.setCardId(cardId);
-    response.setCardType(CardMovementsResponse.CardTypeEnum.valueOf(cardType));
-    response.setMovements(mapToCardMovements(transactions));
-    response.setTotalCount(transactions.size());
-    response.setRetrievedAt(OffsetDateTime.now());
-    return response;
-  }
-
-  private List<CardMovement> mapToCardMovements(List<TransactionResponse> transactions) {
-    return transactions.stream()
-      .map(this::mapTransactionToCardMovement)
-      .collect(Collectors.toList());
-  }
-
-  private CardMovement mapTransactionToCardMovement(TransactionResponse transaction) {
-    CardMovement movement = new CardMovement();
-    movement.setTransactionId(transaction.getTransactionId());
-    movement.setAmount(transaction.getAmount());
-
-    try {
-      movement.setTransactionType(
-        CardMovement.TransactionTypeEnum.valueOf(transaction.getTransactionType())
-      );
-      movement.setStatus(
-        CardMovement.StatusEnum.valueOf(transaction.getStatus())
-      );
-    } catch (IllegalArgumentException e) {
-      log.warn("Unknown enum value in transaction {}: {}", transaction.getTransactionId(), e.getMessage());
-    }
-
-    movement.setMerchantInfo(transaction.getMerchantInfo());
-    movement.setProcessedAt(transaction.getProcessedAt());
-
-    if (transaction.getAccountsAffected() != null) {
-      movement.setAccountsAffected(mapAccountsAffected(transaction.getAccountsAffected()));
-    }
-
-    return movement;
-  }
-
-  private List<CardMovementAccountsAffectedInner> mapAccountsAffected(
-    List<TransactionAccount> accountsAffected) {
-
-    return accountsAffected.stream()
-      .map(account -> {
-        CardMovementAccountsAffectedInner affected = new CardMovementAccountsAffectedInner();
-        affected.setAccountId(account.getAccountId());
-        affected.setAmountDeducted(account.getAmountDeducted());
-        return affected;
+        return Mono.zip(
+            accountServiceClient.getAccountBalance(primaryAccountId),
+            accountServiceClient.getAccountDetails(primaryAccountId)
+          )
+          .map(tuple -> debitCardMapper.toPrimaryAccountBalanceResponse(
+            cardId, debitCard, tuple.getT1(), tuple.getT2()));
       })
-      .collect(Collectors.toList());
+      .doOnSuccess(response -> log.debug("Primary account balance retrieved for card: {}", cardId));
   }
-
 
 
   @Override
@@ -495,19 +340,14 @@ public class DebitCardServiceImpl implements DebitCardService {
 
     return debitCardRepository.countByIsActiveAndType(true, CardType.DEBIT)
       .map(Long::intValue)
-      .doOnSuccess(count -> log.debug("Found {} active debit cards", count))
-      .doOnError(error -> log.error("Error counting active debit cards: {}", error.getMessage()));
+      .doOnSuccess(count -> log.debug("Found {} active debit cards", count));
   }
-
 
   private Mono<String> generateUniqueDebitCardNumber() {
-    String candidate = creditCardService.generateRandomCardNumber();
-
+    String candidate = cardUtils.generateRandomCardNumber();
     return debitCardRepository.findByCardNumber(candidate)
-      .flatMap(existing -> generateUniqueDebitCardNumber()) // si existe, intenta de nuevo
-      .switchIfEmpty(Mono.just(candidate)); // si no existe, úsalo
+      .flatMap(existing -> generateUniqueDebitCardNumber())
+      .switchIfEmpty(Mono.just(candidate));
   }
-
-
 
 }

@@ -7,7 +7,7 @@ import reactor.core.publisher.Mono;
 
 public interface CreditCardService {
 
-  Flux<CreditCardResponse> getAllCards(Boolean isActive);
+  //Flux<CreditCardResponse> getAllCards(Boolean isActive);
 
   Flux<CreditCardResponse> getCardsByActive(Boolean isActive);
 
@@ -16,8 +16,6 @@ public interface CreditCardService {
   Flux<CreditCardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId);
 
   Mono<CreditCardResponse> createCard(CreditCardCreateRequest cardRequest);
-
-  String generateRandomCardNumber();
 
   Mono<CreditCardResponse> updateCard(String id, CreditCardUpdateRequest cardRequest);
 
@@ -42,5 +40,6 @@ public interface CreditCardService {
   Mono<ProductEligibilityResponse> checkCustomerProductEligibility(String customerId);
 
   Mono<Integer> getActiveCardsCount();
+
   //Flux<CreditCardResponse> getActiveCards(Boolean isActive);
 }

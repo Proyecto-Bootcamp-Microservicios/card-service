@@ -30,6 +30,11 @@
     <java.version>11</java.version>
     <spring-cloud.version>2021.0.9</spring-cloud.version>
     <openapi-generator.version>6.6.0</openapi-generator.version>
+    <checkstyle.version>8.45.1</checkstyle.version>
+    <maven-checkstyle-plugin.version>3.1.2</maven-checkstyle-plugin.version>
+    <checkstyle.config.location>checkstyle.xml</checkstyle.config.location>
+    <checkstyle.suppressions.location>checkstyle-suppressions.xml</checkstyle.suppressions.location>
+    <checkstyle.fail.on.violation>true</checkstyle.fail.on.violation>
   </properties>
   <dependencies>
     <dependency>
@@ -202,7 +207,63 @@
           </execution>
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${maven-checkstyle-plugin.version}</version>
+        <configuration>
+          <configLocation>${checkstyle.config.location}</configLocation>
+          <suppressionsLocation>${checkstyle.suppressions.location}</suppressionsLocation>
+          <encoding>UTF-8</encoding>
+          <consoleOutput>true</consoleOutput>
+          <failsOnError>${checkstyle.fail.on.violation}</failsOnError>
+          <linkXRef>false</linkXRef>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <sourceDirectories>
+            <sourceDirectory>${project.build.sourceDirectory}</sourceDirectory>
+          </sourceDirectories>
+          <testSourceDirectories>
+            <testSourceDirectory>${project.build.testSourceDirectory}</testSourceDirectory>
+          </testSourceDirectories>
+        </configuration>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+          </dependency>
+        </dependencies>
+        <executions>
+          <execution>
+            <id>validate</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
-
+  <reporting>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${maven-checkstyle-plugin.version}</version>
+        <configuration>
+          <configLocation>${checkstyle.config.location}</configLocation>
+          <suppressionsLocation>${checkstyle.suppressions.location}</suppressionsLocation>
+          <encoding>UTF-8</encoding>
+        </configuration>
+        <reportSets>
+          <reportSet>
+            <reports>
+              <report>checkstyle</report>
+            </reports>
+          </reportSet>
+        </reportSets>
+      </plugin>
+    </plugins>
+  </reporting>
 </project>

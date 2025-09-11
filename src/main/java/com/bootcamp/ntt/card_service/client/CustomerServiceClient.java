@@ -41,6 +41,29 @@ public class CustomerServiceClient {
       .doOnError(error -> log.error("Error fetching customer details: {}", error.getMessage()));
   }
 
+  public Mono<CustomerTypeResponse> getCustomerType(String customerId) {
+    log.debug("Fetching customer type for ID: {}", customerId);
+
+    return webClient
+      .get()
+      .uri(customerServiceUrl + "/customers/{id}", customerId)
+      .retrieve()
+      .onStatus(HttpStatus::is4xxClientError,
+        response -> {
+          log.warn("Customer not found: {}", customerId);
+          return Mono.error(new CustomerNotFoundException("Customer not found: " + customerId));
+        })
+      .onStatus(HttpStatus::is5xxServerError,
+        response -> {
+          log.error("Customer service error for customer: {}", customerId);
+          return Mono.error(new CustomerServiceException("Error communicating with customer service"));
+        })
+      .bodyToMono(CustomerTypeResponse.class)
+      .doOnSuccess(response -> log.debug("Customer type retrieved: {} for ID: {}",
+        response.getCustomerType(), customerId))
+      .doOnError(error -> log.error("Error fetching customer type: {}", error.getMessage()));
+  }
+
   public Mono<Boolean> customerExists(String customerId) {
     log.debug("Checking if customer exists: {}", customerId);
 

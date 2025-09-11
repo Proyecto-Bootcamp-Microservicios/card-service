@@ -174,8 +174,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-
-   POST /cards/{cardNumber}/process-payment : Process card payment
+   * POST /cards/{cardNumber}/process-payment : Process card payment
    */
   @Override
   public Mono<ResponseEntity<PaymentProcessResponse>> processCardPayment(
@@ -198,8 +197,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-
-   GET /cards/{cardNumber}/balance : Get card balance
+   * GET /cards/{cardNumber}/balance : Get card balance
    */
   @Override
   public Mono<ResponseEntity<CreditCardBalanceResponse>> getCardBalance(
@@ -230,8 +228,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
         log.info("Customer validation completed for {}: hasActiveCard={}, count={}",
           customerId, response.getHasActiveCard(), response.getActiveCardCount());
         return ResponseEntity.ok(response);
-      })
-      .doOnError(error -> log.error("Error validating customer {}: {}", customerId, error.getMessage()));
+      });
   }
 
   /**
@@ -256,8 +253,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
       .switchIfEmpty(Mono.fromCallable(() -> {
         log.warn("No daily averages found for customer: {} for {}/{}", customerId, month, year);
         return ResponseEntity.notFound().build();
-      }))
-      .doOnError(error -> log.error("Error getting daily averages for customer {}: {}", customerId, error.getMessage()));
+      }));
   }
 
 

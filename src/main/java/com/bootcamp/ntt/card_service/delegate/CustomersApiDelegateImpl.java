@@ -7,7 +7,6 @@ import com.bootcamp.ntt.card_service.service.CardConsolidationService;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
@@ -37,16 +36,6 @@ public class CustomersApiDelegateImpl implements CustomersApiDelegate {
         log.info("Cards summary retrieved successfully for customer: {} with {} total cards",
           customerId, response.getTotalActiveCards());
         return ResponseEntity.ok(response);
-      })
-      .onErrorResume(error -> {
-        log.error("Error getting cards summary for customer {}: {}", customerId, error.getMessage());
-
-        // Manejo de errores específicos
-        if (error.getMessage().contains("not found")) {
-          return Mono.just(ResponseEntity.notFound().build());
-        }
-
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
       });
   }
 
@@ -66,14 +55,6 @@ public class CustomersApiDelegateImpl implements CustomersApiDelegate {
         log.info("Eligibility checked for customer: {} - Eligible: {}",
           customerId, response.getIsEligible());
         return ResponseEntity.ok(response);
-      })
-      .onErrorResume(error -> {
-        log.error("Error checking eligibility for customer {}: {}", customerId, error.getMessage());
-
-        if (error.getMessage().contains("not found")) {
-          return Mono.just(ResponseEntity.notFound().build());
-        }
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
       });
   }
 

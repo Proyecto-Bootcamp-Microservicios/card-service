@@ -1,4 +1,4 @@
-package com.bootcamp.ntt.card_service.client.dto;
+package com.bootcamp.ntt.card_service.client.dto.customer;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

@@ -182,4 +182,15 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
       });
   }
+
+  @Override
+  public Mono<ResponseEntity<PrimaryAccountBalanceResponse>> getDebitCardPrimaryAccountBalance(
+    String cardId,
+    ServerWebExchange exchange) {
+
+    log.info("Getting primary account balance for debit card: {}", cardId);
+
+    return debitCardService.getDebitCardPrimaryAccountBalance(cardId)
+      .map(ResponseEntity::ok);
+  }
 }

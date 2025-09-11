@@ -1,13 +1,19 @@
 package com.bootcamp.ntt.card_service.mapper;
 
+import com.bootcamp.ntt.card_service.client.dto.account.AccountBalanceResponse;
+import com.bootcamp.ntt.card_service.client.dto.account.AccountDetailsResponse;
+import com.bootcamp.ntt.card_service.client.dto.account.AccountUsage;
+import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
+import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.DebitCard;
-import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
-import com.bootcamp.ntt.card_service.model.DebitCardResponse;
-import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.*;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Component
 public class DebitCardMapper {
@@ -59,4 +65,116 @@ public class DebitCardMapper {
 
     return response;
   }
+
+  public List<TransactionAccount> toTransactionAccounts(List<AccountUsage> accountsUsed) {
+    if (accountsUsed == null) return List.of();
+
+    return accountsUsed.stream()
+      .filter(usage -> usage.getAmountDeducted() > 0)
+      .map(usage -> {
+        TransactionAccount account = new TransactionAccount();
+        account.setAccountId(usage.getAccountId());
+        account.setAmountDeducted(usage.getAmountDeducted());
+        return account;
+      })
+      .collect(Collectors.toList());
+  }
+
+  public DebitPurchaseResponse toDebitPurchaseResponse(DebitCard debitCard,
+                                                       DebitPurchaseRequest request,
+                                                       List<AccountUsage> accountsUsed,
+                                                       String transactionId) {
+    double totalProcessed = accountsUsed.stream()
+      .mapToDouble(AccountUsage::getAmountDeducted)
+      .sum();
+
+    DebitPurchaseResponse response = new DebitPurchaseResponse();
+    response.setSuccess(true);
+    response.setTransactionId(transactionId);
+    response.setCardId(debitCard.getId());
+    response.setRequestedAmount(request.getAmount());
+    response.setProcessedAmount(totalProcessed);
+    response.setProcessedAt(OffsetDateTime.now());
+
+    List<DebitPurchaseResponseAccountsUsedInner> accountsUsedResponse = accountsUsed.stream()
+      .map(usage -> {
+        DebitPurchaseResponseAccountsUsedInner accountUsed = new DebitPurchaseResponseAccountsUsedInner();
+        accountUsed.setAccountId(usage.getAccountId());
+        accountUsed.setAmountDeducted(usage.getAmountDeducted());
+        accountUsed.setRemainingBalance(usage.getRemainingBalance());
+        return accountUsed;
+      })
+      .collect(Collectors.toList());
+
+    response.setAccountsUsed(accountsUsedResponse);
+
+    return response;
+  }
+
+  public PrimaryAccountBalanceResponse toPrimaryAccountBalanceResponse(
+    String cardId,
+    DebitCard debitCard,
+    AccountBalanceResponse accountBalance,
+    AccountDetailsResponse accountDetails) {
+
+    PrimaryAccountBalanceResponse response = new PrimaryAccountBalanceResponse();
+    response.setCardId(cardId);
+    response.setPrimaryAccountId(debitCard.getPrimaryAccountId());
+    response.setAccountNumber(accountDetails.getAccountNumber());
+    response.setBalance(accountBalance.getAvailableBalance());
+    response.setCurrency(accountDetails.getCurrency());
+
+    try {
+      response.setAccountType(
+        PrimaryAccountBalanceResponse.AccountTypeEnum.valueOf(accountDetails.getAccountType())
+      );
+    } catch (IllegalArgumentException e) {
+      response.setAccountType(PrimaryAccountBalanceResponse.AccountTypeEnum.SAVINGS);
+    }
+
+    if (accountDetails.getLastMovementDate() != null) {
+      response.setLastMovementDate(accountDetails.getLastMovementDate());
+    }
+
+    return response;
+  }
+
+  public String mapTransactionType(DebitPurchaseRequest.TransactionTypeEnum transactionType) {
+    if (transactionType == null) {
+      return "DEBIT_TRANSACTION";
+    }
+
+    switch (transactionType) {
+      case PURCHASE:
+        return "DEBIT_PURCHASE";
+      case WITHDRAWAL:
+        return "DEBIT_WITHDRAWAL";
+      case PAYMENT:
+        return "DEBIT_PAYMENT";
+      default:
+        return "DEBIT_TRANSACTION";
+    }
+  }
+
+  public TransactionRequest toTransactionRequest(DebitCard debitCard, DebitPurchaseRequest request,
+                                                 List<AccountUsage> accountsUsed, String authCode) {
+    TransactionRequest transactionRequest = new TransactionRequest();
+    transactionRequest.setCardId(debitCard.getId());
+    transactionRequest.setAmount(request.getAmount());
+    transactionRequest.setTransactionType(mapTransactionType(request.getTransactionType()));
+    transactionRequest.setAuthorizationCode(authCode);
+    transactionRequest.setStatus("APPROVED");
+    transactionRequest.setTimestamp(LocalDateTime.now());
+
+    if (accountsUsed != null && !accountsUsed.isEmpty()) {
+      transactionRequest.setAccountsAffected(toTransactionAccounts(accountsUsed));
+    }
+
+    /*String description = String.format("%s - %s account(s) used",
+      request.getTransactionType(), accountsUsed != null ? accountsUsed.size() : 0);
+    transactionRequest.setDescription(description);*/
+
+    return transactionRequest;
+  }
+
 }

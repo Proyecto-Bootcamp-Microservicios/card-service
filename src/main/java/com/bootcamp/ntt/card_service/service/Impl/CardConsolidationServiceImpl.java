@@ -1,12 +1,16 @@
 package com.bootcamp.ntt.card_service.service.Impl;
 
 import com.bootcamp.ntt.card_service.client.TransactionServiceClient;
+import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
+import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionResponse;
+import com.bootcamp.ntt.card_service.exception.CardServiceException;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.CardConsolidationService;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
@@ -151,5 +155,96 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
     summary.setTotalTransactions(0);
     summary.setTotalAmount(0.0);
     return summary;
+  }
+
+  @Override
+  public Mono<CardMovementsResponse> getCardMovements(String cardId, Integer limit) {
+    Integer actualLimit = (limit != null && limit <= 50) ? limit : 10;
+    log.debug("Getting last {} movements for card: {}", actualLimit, cardId);
+
+    return determineCardTypeReactive(cardId)
+      .flatMap(cardType ->
+        transactionServiceClient.getLastCardMovements(cardId, actualLimit)
+          .collectList()
+          .map(transactions -> buildCardMovementsResponse(cardId, cardType, transactions))
+      )
+      .doOnSuccess(response -> log.debug("Movements retrieved for card: {}", cardId));
+  }
+
+  private Mono<String> determineCardTypeReactive(String cardId) {
+    // Primero verificar si es tarjeta de débito de manera reactiva
+    return debitCardService.getCardById(cardId)
+      .map(debitCard -> "DEBIT")
+      .switchIfEmpty(
+        // Si no es débito, verificar si es crédito
+        creditCardService.getCardById(cardId)
+          .map(creditCard -> "CREDIT")
+          .switchIfEmpty(Mono.error(new CardServiceException(
+            "CARD_NOT_FOUND",
+            "Card not found: " + cardId,
+            HttpStatus.NOT_FOUND)))
+      );
+  }
+
+  private CardMovementsResponse buildCardMovementsResponse(
+    String cardId,
+    String cardType,
+    List<TransactionResponse> transactions) {
+
+    CardMovementsResponse response = new CardMovementsResponse();
+    response.setCardId(cardId);
+    response.setCardType(CardMovementsResponse.CardTypeEnum.valueOf(cardType));
+    response.setMovements(mapToCardMovements(transactions));
+    response.setTotalCount(transactions.size());
+    response.setRetrievedAt(OffsetDateTime.now());
+    return response;
+  }
+
+  private List<CardMovement> mapToCardMovements(List<TransactionResponse> transactions) {
+    return transactions.stream()
+      .map(this::mapTransactionToCardMovement)
+      .collect(Collectors.toList());
+  }
+
+  private CardMovement mapTransactionToCardMovement(TransactionResponse transaction) {
+    CardMovement movement = new CardMovement();
+    movement.setTransactionId(transaction.getTransactionId());
+    movement.setAmount(transaction.getAmount());
+
+    // Mapeo seguro de enums
+    try {
+      movement.setTransactionType(
+        CardMovement.TransactionTypeEnum.valueOf(transaction.getTransactionType())
+      );
+      movement.setStatus(
+        CardMovement.StatusEnum.valueOf(transaction.getStatus())
+      );
+    } catch (IllegalArgumentException e) {
+      log.warn("Unknown enum value in transaction {}: {}", transaction.getTransactionId(), e.getMessage());
+      // Valores por defecto o manejo específico según tu lógica de negocio
+    }
+
+    movement.setMerchantInfo(transaction.getMerchantInfo());
+    movement.setProcessedAt(transaction.getProcessedAt());
+
+    // Mapear accountsAffected si existe
+    if (transaction.getAccountsAffected() != null) {
+      movement.setAccountsAffected(mapAccountsAffected(transaction.getAccountsAffected()));
+    }
+
+    return movement;
+  }
+
+  private List<CardMovementAccountsAffectedInner> mapAccountsAffected(
+    List<TransactionAccount> accountsAffected) {
+
+    return accountsAffected.stream()
+      .map(account -> {
+        CardMovementAccountsAffectedInner affected = new CardMovementAccountsAffectedInner();
+        affected.setAccountId(account.getAccountId());
+        affected.setAmountDeducted(account.getAmountDeducted());
+        return affected;
+      })
+      .collect(Collectors.toList());
   }
 }

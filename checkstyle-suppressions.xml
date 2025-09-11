@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<!DOCTYPE suppressions PUBLIC
+  "-//Puppy Crawl//DTD Suppressions 1.1//EN"
+  "http://www.puppycrawl.com/dtds/suppressions_1_1.dtd">
+<suppressions>
+  <!-- Suprimir para archivos generados por Maven/target -->
+  <suppress files="[\\/]target[\\/]" checks=".*"/>
+
+  <!-- Suprimir para modelos y APIs generados por OpenAPI -->
+  <suppress files=".*[\\/]model[\\/].*\.java" checks=".*"/>
+  <suppress files=".*[\\/]api[\\/].*\.java" checks=".*"/>
+
+  <!-- Suprimir MagicNumber para tests (números hardcodeados en tests son normales) -->
+  <suppress files=".*Test\.java" checks="MagicNumber"/>
+  <suppress files=".*TestConfiguration\.java" checks="MagicNumber"/>
+
+  <!-- Suprimir para la clase principal de Spring Boot -->
+  <suppress files=".*Application\.java" checks="HideUtilityClassConstructor"/>
+</suppressions>

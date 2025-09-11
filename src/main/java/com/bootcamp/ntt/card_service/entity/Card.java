@@ -1,4 +1,5 @@
 package com.bootcamp.ntt.card_service.entity;
+
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -12,6 +13,7 @@ import org.springframework.data.mongodb.core.index.Indexed;
 
 import javax.validation.constraints.*;
 import java.time.Instant;
+
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -30,7 +32,8 @@ public abstract class Card {
   @Pattern(
     regexp = "^\\d{16}$",
     message = "El número de tarjeta debe tener 16 dígitos"
-  )  @Indexed(unique = true)
+  )
+  @Indexed(unique = true)
   @Field("cardNumber")
   private String cardNumber;
 

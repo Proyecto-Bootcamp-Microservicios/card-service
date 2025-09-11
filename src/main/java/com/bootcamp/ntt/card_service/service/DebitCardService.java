@@ -3,7 +3,7 @@ import com.bootcamp.ntt.card_service.model.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 public interface DebitCardService {
-  Flux<DebitCardResponse> getAllDebitCards(Boolean isActive);
+  //Flux<DebitCardResponse> getAllDebitCards(Boolean isActive);
 
   Flux<DebitCardResponse> getDebitCardsByActive(Boolean isActive);
 
@@ -27,8 +27,7 @@ public interface DebitCardService {
 
   Mono<PrimaryAccountBalanceResponse> getDebitCardPrimaryAccountBalance(String cardId);
 
-  Mono<CardMovementsResponse> getCardMovements(String cardId, Integer limit);
-
   Mono<Integer> getActiveCardsCount();
+
   //Mono<CustomerCardsSummaryResponse> getCustomerCardsSummary(String customerId);
 }

@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.card_service.client;
 
 import com.bootcamp.ntt.card_service.client.dto.transaction.*;
+import com.bootcamp.ntt.card_service.exception.CustomerServiceException;
 import com.bootcamp.ntt.card_service.exception.TransactionServiceException;
 import com.bootcamp.ntt.card_service.model.TransactionCreateRequest;
 import com.bootcamp.ntt.card_service.model.TransactionsSummary;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -28,10 +30,11 @@ public class TransactionServiceClient {
 
   /**
    * Crea una transacción en el transaction-service
+   *
    * @param request Datos de la transacción a crear
    * @return Mono<Void> - Solo nos interesa que se complete exitosamente
    */
-  public Mono<Void> createTransaction(TransactionCreateRequest request) {
+  public Mono<Void> createTransaction(TransactionRequest request) {
     log.debug("Creating transaction for card: {}", request.getCardId());
 
     return webClient
@@ -130,22 +133,16 @@ public class TransactionServiceClient {
 
 
   public Flux<TransactionResponse> getLastCardMovements(String cardId, Integer limit) {
-    log.debug("Getting last {} movements for card: {}", limit, cardId);
+    log.debug("Calling transaction service for card movements: cardId={}, limit={}", cardId, limit);
 
-    return webClient
-      .get()
-      .uri(transactionServiceUrl + "/transactions/cards/{cardId}?limit={limit}", cardId, limit)
+    return webClient.get()
+      .uri(transactionServiceUrl + "/transactions/cards/{cardId}/movements", cardId)
       .retrieve()
-      .onStatus(HttpStatus::is4xxClientError, response -> {
-        log.warn("No transactions found for card: {}", cardId);
-        return Mono.error(new TransactionServiceException("No transactions found"));
-      })
-      .onStatus(HttpStatus::is5xxServerError, response -> {
-        log.error("Transaction service error for card: {}", cardId);
-        return Mono.error(new TransactionServiceException("Error getting transactions"));
-      })
       .bodyToFlux(TransactionResponse.class)
-      .doOnComplete(() -> log.debug("Transactions retrieved for card: {}", cardId))
-      .doOnError(error -> log.error("Error getting transactions: {}", error.getMessage()));
+      .take(limit) // Limitar en cliente como backup
+      .onErrorMap(WebClientResponseException.class, ex -> {
+        log.error("Error calling transaction service: {}", ex.getMessage());
+        return new CustomerServiceException("Error retrieving card movements: " + ex.getMessage());
+      });
   }
 }
