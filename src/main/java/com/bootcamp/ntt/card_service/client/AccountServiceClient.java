@@ -1,6 +1,9 @@
 package com.bootcamp.ntt.card_service.client;
 
-import com.bootcamp.ntt.card_service.client.dto.account.*;
+import com.bootcamp.ntt.card_service.client.dto.account.AccountBalanceResponse;
+import com.bootcamp.ntt.card_service.client.dto.account.AccountDebitRequest;
+import com.bootcamp.ntt.card_service.client.dto.account.AccountDetailsResponse;
+import com.bootcamp.ntt.card_service.client.dto.account.AccountTransactionResponse;
 import com.bootcamp.ntt.card_service.exception.AccountNotFoundException;
 import com.bootcamp.ntt.card_service.exception.AccountServiceException;
 import lombok.RequiredArgsConstructor;

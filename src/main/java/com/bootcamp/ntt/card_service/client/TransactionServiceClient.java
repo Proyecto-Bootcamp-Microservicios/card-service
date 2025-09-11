@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.card_service.client;
 
-import com.bootcamp.ntt.card_service.client.dto.transaction.*;
+import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
+import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionResponse;
 import com.bootcamp.ntt.card_service.exception.CustomerServiceException;
 import com.bootcamp.ntt.card_service.exception.TransactionServiceException;
 import com.bootcamp.ntt.card_service.model.TransactionCreateRequest;

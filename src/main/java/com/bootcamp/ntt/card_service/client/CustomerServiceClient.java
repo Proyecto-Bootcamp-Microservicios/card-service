@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.card_service.client;
 
-import com.bootcamp.ntt.card_service.client.dto.customer.*;
+import com.bootcamp.ntt.card_service.client.dto.customer.CustomerResponse;
+import com.bootcamp.ntt.card_service.client.dto.customer.CustomerTypeResponse;
 import com.bootcamp.ntt.card_service.exception.CustomerNotFoundException;
 import com.bootcamp.ntt.card_service.exception.CustomerServiceException;
 import lombok.RequiredArgsConstructor;

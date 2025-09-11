@@ -36,6 +36,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/CreditCardResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Create a new credit card
       operationId: createCreditCard
@@ -153,7 +165,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-
 
   /credit-cards/{id}/deactivate:
     patch:
@@ -296,7 +307,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentProcessResponse'
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Card not found
           content:
@@ -390,6 +401,18 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/DebitCardResponse'
+        '400':
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     post:
       summary: Create a new debit card
       operationId: createDebitCard
@@ -408,8 +431,16 @@ paths:
                 $ref: '#/components/schemas/DebitCardResponse'
         '400':
           description: Bad request - Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '409':
           description: Business rule violation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /debit-cards/{id}:
     get:
@@ -430,6 +461,10 @@ paths:
                 $ref: '#/components/schemas/DebitCardResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     put:
       summary: Update a debit card by ID
       operationId: updateDebitCard
@@ -454,8 +489,16 @@ paths:
                 $ref: '#/components/schemas/DebitCardResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '400':
           description: Bad request - Validation errors
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
     delete:
       summary: Delete a debit card by ID
       operationId: deleteDebitCard
@@ -470,6 +513,10 @@ paths:
           description: Debit card deleted
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /debit-cards/{id}/deactivate:
     patch:
@@ -490,6 +537,10 @@ paths:
                 $ref: '#/components/schemas/DebitCardResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /debit-cards/{id}/activate:
     patch:
@@ -510,6 +561,10 @@ paths:
                 $ref: '#/components/schemas/DebitCardResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   # DEBIT CARD SPECIFIC OPERATIONS
   /debit-cards/{id}/associate-account:
@@ -531,13 +586,13 @@ paths:
               $ref: '#/components/schemas/AssociateAccountRequest'
       responses:
         '200':
-          description: Invalid account or already associated
+          description: Account associated successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DebitCardResponse'
         '400':
-          description: Insufficient credit or invalid request
+          description: Invalid account or already associated
           content:
             application/json:
               schema:
@@ -574,9 +629,16 @@ paths:
                 $ref: '#/components/schemas/DebitCardResponse'
         '400':
           description: Cannot remove primary account or account not associated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Debit card not found
-
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /debit-cards/{cardNumber}/process-purchase:
     post:
@@ -604,8 +666,16 @@ paths:
                 $ref: '#/components/schemas/DebitPurchaseResponse'
         '400':
           description: Insufficient funds or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /debit-cards/{cardId}/primary-account/balance:
     get:
       summary: Get primary account balance via debit card
@@ -626,6 +696,10 @@ paths:
                 $ref: '#/components/schemas/PrimaryAccountBalanceResponse'
         '404':
           description: Debit card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /cards/{cardId}/movements:
     get:
@@ -654,6 +728,10 @@ paths:
                 $ref: '#/components/schemas/CardMovementsResponse'
         '404':
           description: Card not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /customers/{customerId}/product-eligibility:
     get:
@@ -675,6 +753,10 @@ paths:
                 $ref: '#/components/schemas/ProductEligibilityResponse'
         '404':
           description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /customers/{customerId}/cards-summary:
     get:
@@ -696,6 +778,10 @@ paths:
                 $ref: '#/components/schemas/CustomerCardsSummaryResponse'
         '404':
           description: Customer not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /cards/reports/period:
     get:
       summary: Generate cards report for specific period

@@ -2,7 +2,6 @@ package com.bootcamp.ntt.card_service.repository;
 
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.enums.CardType;
-import com.bootcamp.ntt.card_service.enums.CreditCardType;
 import org.springframework.data.mongodb.repository.ReactiveMongoRepository;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Flux;
