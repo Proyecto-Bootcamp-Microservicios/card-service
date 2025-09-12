@@ -10,7 +10,7 @@ import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.exception.CardServiceException;
 import com.bootcamp.ntt.card_service.exception.EntityNotFoundException;
-import com.bootcamp.ntt.card_service.exception.ErrorCodes;
+import com.bootcamp.ntt.card_service.utils.ErrorCodes;
 import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.repository.DebitCardRepository;

@@ -1,17 +1,35 @@
 package com.bootcamp.ntt.card_service.delegate;
 
 import com.bootcamp.ntt.card_service.api.CreditCardsApiDelegate;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.ChargeAuthorizationRequest;
+import com.bootcamp.ntt.card_service.model.ChargeAuthorizationResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardBalanceResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.CreditCardResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponse;
+import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponse;
+import com.bootcamp.ntt.card_service.model.PaymentProcessRequest;
+import com.bootcamp.ntt.card_service.model.PaymentProcessResponse;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * Implementación del delegate para la API de tarjetas de crédito.
+ * Proporciona endpoints para el manejo completo del ciclo de vida de tarjetas de crédito,
+ * incluyendo creación, consulta, actualización, activación/desactivación, autorización de cargos,
+ * procesamiento de pagos y consulta de balances.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -20,7 +38,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   private final CreditCardService creditCardService;
 
   /**
-   * POST /cards : Create a new card
+   * Crea una nueva tarjeta de crédito para un cliente.
+   * Valida los datos del cliente y genera una nueva tarjeta con número único.
+   *
+   * @param cardRequest Datos de la tarjeta a crear (customerId, creditCardType, creditLimit)
+   * @param exchange    Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta creada o error de validación
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> createCreditCard(
@@ -39,7 +62,13 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * GET /cards : Get all cards
+   * Obtiene todas las tarjetas de crédito con filtros opcionales.
+   * Permite filtrar por cliente específico y estado activo/inactivo.
+   *
+   * @param customerId ID del cliente para filtrar (opcional)
+   * @param isActive   Estado de la tarjeta - true para activas, false para inactivas (por defecto: true)
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene el flujo de tarjetas encontradas
    */
   @Override
   public Mono<ResponseEntity<Flux<CreditCardResponse>>> getAllCreditCards(
@@ -59,7 +88,11 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * GET /cards/{id} : Get a card by ID
+   * Obtiene una tarjeta de crédito específica por su ID.
+   *
+   * @param id       ID único de la tarjeta
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta encontrada o 404 si no existe
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> getCreditCardById(
@@ -81,7 +114,13 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * PUT /cards/{id} : Update a card
+   * Actualiza los datos de una tarjeta de crédito existente.
+   * Permite modificar límite de crédito y otros datos configurables.
+   *
+   * @param id          ID de la tarjeta a actualizar
+   * @param cardRequest Datos actualizados de la tarjeta
+   * @param exchange    Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta actualizada
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> updateCreditCard(
@@ -101,7 +140,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * DELETE /cards/{id} : Delete a card
+   * Elimina una tarjeta de crédito del sistema.
+   * Esta operación es irreversible y debe usarse con precaución.
+   *
+   * @param id       ID de la tarjeta a eliminar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity vacío (204 No Content) si la eliminación fue exitosa
    */
   @Override
   public Mono<ResponseEntity<Void>> deleteCreditCard(
@@ -119,7 +163,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * PUT /cards/{id}/deactivate : Deactivate a card
+   * Desactiva una tarjeta de crédito, impidiendo nuevas transacciones.
+   * La tarjeta mantiene su historial pero no puede ser usada para cargos.
+   *
+   * @param id       ID de la tarjeta a desactivar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta desactivada
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> deactivateCreditCard(
@@ -137,7 +186,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * PUT /cards/{id}/activate : Activate a card
+   * Activa una tarjeta de crédito, permitiendo realizar transacciones.
+   * Solo las tarjetas activas pueden procesar cargos y pagos.
+   *
+   * @param id       ID de la tarjeta a activar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta activada
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> activateCreditCard(
@@ -155,7 +209,13 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * POST /cards/{cardNumber}/authorizeCharge : Authorize a charge
+   * Autoriza un cargo en una tarjeta de crédito.
+   * Valida que la tarjeta esté activa, tenga crédito disponible y procesa la autorización.
+   *
+   * @param cardNumber                   Número de la tarjeta para el cargo
+   * @param chargeAuthorizationRequest   Datos del cargo (monto, descripción, etc.)
+   * @param exchange                     Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la respuesta de autorización
    */
   @Override
   public Mono<ResponseEntity<ChargeAuthorizationResponse>> authorizeCharge(
@@ -174,7 +234,13 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * POST /cards/{cardNumber}/process-payment : Process card payment
+   * Procesa un pago hacia una tarjeta de crédito.
+   * Reduce el saldo pendiente de la tarjeta y aumenta el crédito disponible.
+   *
+   * @param cardNumber               Número de la tarjeta para el pago
+   * @param paymentProcessRequest    Datos del pago (monto, método, etc.)
+   * @param exchange                 Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene el resultado del procesamiento del pago
    */
   @Override
   public Mono<ResponseEntity<PaymentProcessResponse>> processCardPayment(
@@ -197,7 +263,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * GET /cards/{cardNumber}/balance : Get card balance
+   * Obtiene el balance actual de una tarjeta de crédito.
+   * Incluye el saldo pendiente, crédito disponible y límite total.
+   *
+   * @param cardNumber Número de la tarjeta
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la información del balance
    */
   @Override
   public Mono<ResponseEntity<CreditCardBalanceResponse>> getCardBalance(
@@ -213,7 +284,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * GET /cards/customers/{customerId}/has-active-card : Check if customer has active card
+   * Verifica si un cliente tiene al menos una tarjeta de crédito activa.
+   * Útil para validaciones de negocio que requieren existencia de tarjetas activas.
+   *
+   * @param customerId ID del cliente a validar
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la información de validación del cliente
    */
   @Override
   public Mono<ResponseEntity<CustomerCardValidationResponse>> checkCustomerHasActiveCard(
@@ -232,7 +308,14 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   }
 
   /**
-   * GET /cards/customers/{customerId}/daily-averages : Get customer daily averages
+   * Obtiene los promedios diarios de saldos de tarjetas de un cliente para un mes específico.
+   * Calcula estadísticas de uso y balance promedio por día del mes consultado.
+   *
+   * @param customerId ID del cliente
+   * @param year       Año de consulta
+   * @param month      Mes de consulta (1-12)
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene los promedios diarios o 404 si no hay datos
    */
   @Override
   public Mono<ResponseEntity<CustomerDailyAverageResponse>> getCustomerDailyAverages(
@@ -255,6 +338,4 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
         return ResponseEntity.notFound().build();
       }));
   }
-
-
 }

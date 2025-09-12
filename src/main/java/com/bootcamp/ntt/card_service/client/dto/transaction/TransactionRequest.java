@@ -1,9 +1,9 @@
 package com.bootcamp.ntt.card_service.client.dto.transaction;
 
-import lombok.Data;
-
 import java.time.LocalDateTime;
 import java.util.List;
+
+import lombok.Data;
 
 @Data
 public class TransactionRequest {

@@ -6,14 +6,21 @@ import com.bootcamp.ntt.card_service.client.dto.account.AccountUsage;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.DebitCard;
-import com.bootcamp.ntt.card_service.model.*;
-import org.springframework.stereotype.Component;
+import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.DebitCardResponse;
+import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponseAccountsUsedInner;
+import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Component;
 
 @Component
 public class DebitCardMapper {
@@ -67,7 +74,9 @@ public class DebitCardMapper {
   }
 
   public List<TransactionAccount> toTransactionAccounts(List<AccountUsage> accountsUsed) {
-    if (accountsUsed == null) return List.of();
+    if (accountsUsed == null) {
+      return List.of();
+    }
 
     return accountsUsed.stream()
       .filter(usage -> usage.getAmountDeducted() > 0)
@@ -176,5 +185,4 @@ public class DebitCardMapper {
 
     return transactionRequest;
   }
-
 }

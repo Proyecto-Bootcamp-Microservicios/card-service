@@ -3,17 +3,32 @@ package com.bootcamp.ntt.card_service.delegate;
 import com.bootcamp.ntt.card_service.api.DebitCardsApiDelegate;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.exception.EntityNotFoundException;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.AssociateAccountRequest;
+import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.DebitCardResponse;
+import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
+import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
+
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * Implementación del delegate para la API de tarjetas de débito.
+ * Proporciona endpoints para el manejo completo del ciclo de vida de tarjetas de débito,
+ * incluyendo creación, consulta, actualización, activación/desactivación, asociación de cuentas,
+ * procesamiento de compras y consulta de balances de cuenta primaria.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -22,7 +37,13 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   private final DebitCardService debitCardService;
 
   /**
-   * POST /debit-cards : Crear nueva tarjeta de débito
+   * Crea una nueva tarjeta de débito para un cliente.
+   * Valida los datos del cliente y genera una nueva tarjeta con número único
+   * que debe estar asociada a una cuenta bancaria existente.
+   *
+   * @param cardRequest Datos de la tarjeta a crear (customerId, accountId, etc.)
+   * @param exchange    Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta de débito creada o error de validación
    */
   @Override
   public Mono<ResponseEntity<DebitCardResponse>> createDebitCard(
@@ -39,7 +60,13 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   }
 
   /**
-   * GET /debit-cards : Obtener todas las tarjetas de débito
+   * Obtiene todas las tarjetas de débito con filtros opcionales.
+   * Permite filtrar por cliente específico y estado activo/inactivo.
+   *
+   * @param customerId ID del cliente para filtrar (opcional)
+   * @param isActive   Estado de la tarjeta - true para activas, false para inactivas (por defecto: true)
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene el flujo de tarjetas de débito encontradas
    */
   @Override
   public Mono<ResponseEntity<Flux<DebitCardResponse>>> getAllDebitCards(
@@ -55,7 +82,11 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   }
 
   /**
-   * GET /debit-cards/{id} : Obtener tarjeta de débito por ID
+   * Obtiene una tarjeta de débito específica por su ID.
+   *
+   * @param id       ID único de la tarjeta de débito
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta encontrada o 404 si no existe
    */
   @Override
   public Mono<ResponseEntity<DebitCardResponse>> getDebitCardById(
@@ -75,7 +106,13 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   }
 
   /**
-   * PUT /debit-cards/{id} : Actualizar tarjeta de débito
+   * Actualiza los datos de una tarjeta de débito existente.
+   * Permite modificar información como límites de retiro y otros datos configurables.
+   *
+   * @param id          ID de la tarjeta a actualizar
+   * @param cardRequest Datos actualizados de la tarjeta
+   * @param exchange    Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta actualizada
    */
   @Override
   public Mono<ResponseEntity<DebitCardResponse>> updateDebitCard(
@@ -93,7 +130,12 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   }
 
   /**
-   * DELETE /debit-cards/{id} : Eliminar tarjeta de débito
+   * Elimina una tarjeta de débito del sistema.
+   * Esta operación es irreversible y debe usarse con precaución.
+   *
+   * @param id       ID de la tarjeta a eliminar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity vacío (204 No Content) si la eliminación fue exitosa
    */
   @Override
   public Mono<ResponseEntity<Void>> deleteDebitCard(
@@ -109,7 +151,12 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   }
 
   /**
-   * PATCH /debit-cards/{id}/deactivate : Desactivar tarjeta de débito
+   * Desactiva una tarjeta de débito, impidiendo nuevas transacciones.
+   * La tarjeta mantiene su historial pero no puede ser usada para compras o retiros.
+   *
+   * @param id       ID de la tarjeta a desactivar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta desactivada
    */
   @Override
   public Mono<ResponseEntity<DebitCardResponse>> deactivateDebitCard(
@@ -125,7 +172,12 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   }
 
   /**
-   * PATCH /debit-cards/{id}/activate : Activar tarjeta de débito
+   * Activa una tarjeta de débito, permitiendo realizar transacciones.
+   * Solo las tarjetas activas pueden procesar compras, retiros y consultas de saldo.
+   *
+   * @param id       ID de la tarjeta a activar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta activada
    */
   @Override
   public Mono<ResponseEntity<DebitCardResponse>> activateDebitCard(
@@ -140,6 +192,16 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
       });
   }
 
+  /**
+   * Asocia una cuenta bancaria a una tarjeta de débito existente.
+   * Permite vincular la tarjeta con cuentas adicionales del mismo cliente
+   * para realizar transacciones desde diferentes fuentes de fondos.
+   *
+   * @param id                       ID de la tarjeta de débito
+   * @param associateAccountRequest  Datos de la cuenta a asociar (accountId, tipo de asociación)
+   * @param exchange                 Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la tarjeta con la nueva asociación de cuenta
+   */
   @Override
   public Mono<ResponseEntity<DebitCardResponse>> associateAccountToDebitCard(
     String id,
@@ -156,6 +218,16 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
       });
   }
 
+  /**
+   * Procesa una compra con tarjeta de débito.
+   * Valida que la tarjeta esté activa, que tenga fondos suficientes en la cuenta asociada
+   * y ejecuta el débito correspondiente.
+   *
+   * @param cardNumber             Número de la tarjeta de débito para la compra
+   * @param debitPurchaseRequest   Datos de la compra (monto, comercio, descripción, etc.)
+   * @param exchange               Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la respuesta del procesamiento de la compra
+   */
   @Override
   public Mono<ResponseEntity<DebitPurchaseResponse>> processDebitCardPurchase(
     String cardNumber,
@@ -183,6 +255,15 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
       });
   }
 
+  /**
+   * Obtiene el balance de la cuenta primaria asociada a una tarjeta de débito.
+   * Consulta directamente en el servicio de cuentas el saldo disponible
+   * en la cuenta principal vinculada a la tarjeta.
+   *
+   * @param cardId   ID de la tarjeta de débito
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la información del balance de la cuenta primaria
+   */
   @Override
   public Mono<ResponseEntity<PrimaryAccountBalanceResponse>> getDebitCardPrimaryAccountBalance(
     String cardId,

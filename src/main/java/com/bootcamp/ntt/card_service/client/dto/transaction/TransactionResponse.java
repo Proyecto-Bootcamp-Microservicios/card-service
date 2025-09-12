@@ -1,9 +1,10 @@
 package com.bootcamp.ntt.card_service.client.dto.transaction;
 
-import lombok.Data;
-
 import java.time.OffsetDateTime;
 import java.util.List;
+
+
+import lombok.Data;
 
 @Data
 public class TransactionResponse {

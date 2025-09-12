@@ -1,16 +1,19 @@
 package com.bootcamp.ntt.card_service.exception;
 
 import com.bootcamp.ntt.card_service.model.ErrorResponse;
+
+import java.time.OffsetDateTime;
+
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
-import reactor.core.publisher.Mono;
 
-import java.time.OffsetDateTime;
+import reactor.core.publisher.Mono;
 
 @Slf4j
 @RestControllerAdvice
@@ -85,6 +88,30 @@ public class GlobalExceptionHandler {
     }
   }
 
+  @ExceptionHandler(CustomerServiceUnavailableException.class)
+  public Mono<ResponseEntity<ErrorResponse>> handleCustomerServiceUnavailable(CustomerServiceUnavailableException ex) {
+    log.error("Customer service unavailable - card creation blocked: {}", ex.getMessage());
+
+    ErrorResponse errorResponse = new ErrorResponse();
+    errorResponse.setCode("CUSTOMER_SERVICE_UNAVAILABLE");
+    errorResponse.setMessage(ex.getMessage());
+    errorResponse.setTimestamp(OffsetDateTime.now());
+
+    return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse));
+  }
+
+  @ExceptionHandler(TransactionServiceUnavailableException.class)
+  public Mono<ResponseEntity<ErrorResponse>> handleTransactionServiceUnavailable(TransactionServiceUnavailableException ex) {
+    log.error("Transaction service unavailable: {}", ex.getMessage());
+
+    ErrorResponse errorResponse = new ErrorResponse();
+    errorResponse.setCode("TRANSACTION_SERVICE_UNAVAILABLE");
+    errorResponse.setMessage(ex.getMessage());
+    errorResponse.setTimestamp(OffsetDateTime.now());
+
+    return Mono.just(ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse));
+  }
+
   @ExceptionHandler(WebExchangeBindException.class)
   public Mono<ResponseEntity<ErrorResponse>> handleValidationException(WebExchangeBindException ex) {
     log.warn("Validation error: {}", ex.getMessage());
@@ -146,5 +173,4 @@ public class GlobalExceptionHandler {
 
     return Mono.just(ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse));
   }*/
-
 }

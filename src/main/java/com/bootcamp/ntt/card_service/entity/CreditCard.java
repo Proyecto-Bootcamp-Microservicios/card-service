@@ -2,13 +2,20 @@ package com.bootcamp.ntt.card_service.entity;
 
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.enums.CreditCardType;
-import lombok.*;
-import org.springframework.data.mongodb.core.mapping.Document;
-import org.springframework.data.mongodb.core.mapping.Field;
 
-import javax.validation.constraints.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+
+import javax.validation.constraints.DecimalMin;
+import javax.validation.constraints.NotNull;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
+
+import org.springframework.data.mongodb.core.mapping.Document;
+import org.springframework.data.mongodb.core.mapping.Field;
 
 @Data
 @EqualsAndHashCode(callSuper = true)
@@ -52,5 +59,4 @@ public class CreditCard extends Card {
   public CardType getCardType() {
     return CardType.CREDIT;
   }
-
 }

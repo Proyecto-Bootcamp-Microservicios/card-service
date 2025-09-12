@@ -1,19 +1,21 @@
 package com.bootcamp.ntt.card_service.delegate;
 
 import com.bootcamp.ntt.card_service.api.CardsApiDelegate;
-import com.bootcamp.ntt.card_service.api.CreditCardsApiDelegate;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.CardMovementsResponse;
+import com.bootcamp.ntt.card_service.model.CardsPeriodicReportResponse;
 import com.bootcamp.ntt.card_service.service.CardConsolidationService;
+
+import java.time.LocalDate;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
-import java.time.LocalDate;
+import reactor.core.publisher.Mono;
 
 /**
  * Delegate para la API de consolidación de tarjetas.
@@ -54,6 +56,14 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
       });
   }
 
+  /**
+   * Obtiene los movimientos más recientes de una tarjeta específica.
+   *
+   * @param cardId   Identificador único de la tarjeta
+   * @param limit    Número máximo de movimientos a retornar
+   * @param exchange Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la lista de movimientos de la tarjeta
+   */
   @Override
   public Mono<ResponseEntity<CardMovementsResponse>> getCardMovements(
     String cardId,

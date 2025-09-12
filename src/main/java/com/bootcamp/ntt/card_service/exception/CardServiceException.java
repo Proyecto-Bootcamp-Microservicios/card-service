@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.card_service.exception;
 
 import lombok.Getter;
+
 import org.springframework.http.HttpStatus;
 
 @Getter

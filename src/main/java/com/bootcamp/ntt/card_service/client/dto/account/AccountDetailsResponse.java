@@ -1,6 +1,9 @@
 package com.bootcamp.ntt.card_service.client.dto.account;
-import lombok.Data;
+
 import java.time.OffsetDateTime;
+
+import lombok.Data;
+
 @Data
 public class AccountDetailsResponse {
   private String accountId;

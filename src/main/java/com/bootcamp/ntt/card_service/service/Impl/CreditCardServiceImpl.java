@@ -7,11 +7,13 @@ import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.entity.DailyBalance;
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
+import com.bootcamp.ntt.card_service.exception.TransactionServiceUnavailableException;
 import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.repository.CreditCardRepository;
 import com.bootcamp.ntt.card_service.repository.DailyBalanceRepository;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
+import com.bootcamp.ntt.card_service.service.ExternalServiceWrapper;
 import com.bootcamp.ntt.card_service.utils.CardUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +38,7 @@ public class CreditCardServiceImpl implements CreditCardService {
   private final CreditCardMapper creditCardMapper;
   private final CustomerServiceClient customerServiceClient;
   private final TransactionServiceClient transactionServiceClient;
+  private final ExternalServiceWrapper externalServiceWrapper;
   private final CardUtils cardUtils;
 
 
@@ -71,11 +74,10 @@ public class CreditCardServiceImpl implements CreditCardService {
   public Mono<CreditCardResponse> createCard(CreditCardCreateRequest cardRequest) {
     log.debug("Creating card for customer: {}", cardRequest.getCustomerId());
 
-    return customerServiceClient.getCustomerType(cardRequest.getCustomerId())
+    return externalServiceWrapper.getCustomerTypeWithCircuitBreaker(cardRequest.getCustomerId())
       .flatMap(customerType -> validateCreditCreation(cardRequest.getCustomerId(), customerType.getCustomerType())
-        //.then(Mono.just(cardRequest))
         .then(generateUniqueCardNumber())
-        .map(cardNumber -> creditCardMapper.toEntity(cardRequest, customerType.getCustomerType(), cardNumber)) // Pasamos el tipo
+        .map(cardNumber -> creditCardMapper.toEntity(cardRequest, customerType.getCustomerType(), cardNumber))
         .flatMap(creditCardRepository::save)
         .map(creditCardMapper::toResponse))
       .doOnSuccess(response -> log.debug("Card created with ID: {}", response.getId()));
@@ -157,26 +159,45 @@ public class CreditCardServiceImpl implements CreditCardService {
 
     String authCode = cardUtils.generateAuthCode();
 
-    // Guardar tarjeta y crear transacción
+    // transacción atómica para la tarjeta
     return creditCardRepository.save(card)
-      .flatMap(savedCard -> createTransactionRecord(savedCard, request, authCode)
-        .then(Mono.fromCallable(() -> creditCardMapper.toChargeApprovedResponse(savedCard, request.getAmount(), authCode)))
-        .onErrorResume(transactionError -> {
-          log.error("Error creating transaction record for cardId={}, authCode={}",
-            savedCard.getId(), authCode, transactionError);
-          return Mono.just(creditCardMapper.toChargeApprovedResponse(savedCard, request.getAmount(), authCode));
-        })
-      )
-      .doOnSuccess(response -> log.info("Cargo autorizado: cardId={}, authCode={}, newCredit={}",
-        card.getId(), authCode, newAvailableCredit));
-    /*return creditCardRepository.save(card)
-      .map(savedCard -> creditCardMapper.toChargeApprovedResponse(savedCard, request.getAmount(), authCode));*/
+      .flatMap(savedCard -> {
+        TransactionRequest transactionRequest = creditCardMapper.toTransactionRequest(
+          savedCard, request, authCode);
+
+        return externalServiceWrapper.createTransactionWithCircuitBreaker(transactionRequest)
+          .then(Mono.fromCallable(() ->
+            creditCardMapper.toChargeApprovedResponse(savedCard, request.getAmount(), authCode)
+          ))
+          // Si falla la transacción, revertimos los cambios en la tarjeta
+          .onErrorResume(transactionError -> {
+            log.error("Transaction failed, reverting card changes for cardId={}",
+              savedCard.getId(), transactionError);
+
+            return revertCardChanges(savedCard, request.getAmount())
+              .then(Mono.error(new TransactionServiceUnavailableException(
+                "Transaction service failed. Charge authorization reverted."
+                )));
+          });
+      });
+  }
+
+  private Mono<CreditCard> revertCardChanges(CreditCard card, double amount) {
+    // Revertimos los cambios en el crédito disponible y balance
+    double revertedAvailableCredit = card.getAvailableCredit().doubleValue() + amount;
+    card.setAvailableCredit(BigDecimal.valueOf(revertedAvailableCredit));
+    card.setCurrentBalance(card.getCurrentBalance().subtract(BigDecimal.valueOf(amount)));
+
+    return creditCardRepository.save(card)
+      .doOnSuccess(revertedCard -> log.info("Card changes reverted for cardId={}", card.getId()))
+      .doOnError(error -> log.error("Failed to revert card changes for cardId={}",
+        card.getId(), error));
   }
 
   private Mono<Void> createTransactionRecord(CreditCard card, ChargeAuthorizationRequest request, String authCode) {
     TransactionRequest transactionRequest = creditCardMapper.toTransactionRequest(card, request, authCode);
 
-    return transactionServiceClient.createTransaction(transactionRequest);
+    return externalServiceWrapper.createTransactionWithCircuitBreaker(transactionRequest);
   }
 
   public Mono<String> generateUniqueCardNumber() {
@@ -307,22 +328,20 @@ public class CreditCardServiceImpl implements CreditCardService {
       .filter(Objects::nonNull);
   }
 
-
-  @Override
   public Mono<ProductEligibilityResponse> checkCustomerProductEligibility(String customerId) {
     log.debug("Checking product eligibility for customer: {}", customerId);
 
-    /*return customerServiceClient.getCustomer(customerId)
+    // CAMBIO: usar wrapper con circuit breaker
+    return externalServiceWrapper.getCustomerWithCircuitBreaker(customerId)
       .flatMap(customer -> getCustomerEligibilityStatus(customerId))
       .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",
         customerId, response.getIsEligible()))
       .doOnError(error -> log.error("Error checking eligibility for customer {}: {}",
-        customerId, error.getMessage()));*/
-
+        customerId, error.getMessage()));
     // Para pruebas locales, omite la llamada externa:
-    return getCustomerEligibilityStatus(customerId)
+    /*return getCustomerEligibilityStatus(customerId)
       .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",
-        customerId, response.getIsEligible()));
+        customerId, response.getIsEligible()));*/
   }
 
   private Mono<ProductEligibilityResponse> getCustomerEligibilityStatus(String customerId) {

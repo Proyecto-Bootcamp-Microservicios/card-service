@@ -1,13 +1,19 @@
 package com.bootcamp.ntt.card_service.entity;
 
-import com.bootcamp.ntt.card_service.enums.CardType;
-import lombok.*;
+import java.util.ArrayList;
+import java.util.List;
+
+import javax.validation.constraints.NotBlank;
+
 import org.springframework.data.mongodb.core.mapping.Document;
 import org.springframework.data.mongodb.core.mapping.Field;
 
-import javax.validation.constraints.*;
-import java.util.ArrayList;
-import java.util.List;
+import com.bootcamp.ntt.card_service.enums.CardType;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.NoArgsConstructor;
 
 @Data
 @EqualsAndHashCode(callSuper = true)

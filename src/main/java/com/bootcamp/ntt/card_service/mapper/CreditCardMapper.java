@@ -3,17 +3,34 @@ package com.bootcamp.ntt.card_service.mapper;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.enums.CreditCardType;
-import com.bootcamp.ntt.card_service.model.*;
-import org.springframework.stereotype.Component;
+import com.bootcamp.ntt.card_service.model.ChargeAuthorizationRequest;
+import com.bootcamp.ntt.card_service.model.ChargeAuthorizationResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardBalanceResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.CreditCardResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponse;
+import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponseCardSummaryInner;
+import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponse;
+import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponsePeriod;
+import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponseProductsInner;
+import com.bootcamp.ntt.card_service.model.OverdueProduct;
+import com.bootcamp.ntt.card_service.model.PaymentProcessResponse;
+import com.bootcamp.ntt.card_service.model.ProductEligibilityResponse;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.stereotype.Component;
+
 @Component
 public class CreditCardMapper {
+
+  private static final int PERCENTAGE_MULTIPLIER = 100;
 
   public CreditCard toEntity(CreditCardCreateRequest dto, String customerType, String cardNumber) {
     if (dto == null) {
@@ -35,12 +52,10 @@ public class CreditCardMapper {
     return card;
   }
 
-
   public CreditCard updateEntity(CreditCard existing, CreditCardUpdateRequest dto) {
     if (existing == null || dto == null) {
       return existing;
     }
-
 
     if (dto.getCreditLimit() != null) {
       existing.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));
@@ -85,7 +100,9 @@ public class CreditCardMapper {
   }
 
   public CreditCardBalanceResponse toBalanceResponse(CreditCard entity) {
-    if (entity == null) return null;
+    if (entity == null) {
+      return null;
+    }
 
     CreditCardBalanceResponse response = new CreditCardBalanceResponse();
     response.setCardId(entity.getId());
@@ -95,10 +112,10 @@ public class CreditCardMapper {
     response.setCurrentBalance(entity.getCurrentBalance().doubleValue());
 
     // Calcular porcentaje de utilización
-    BigDecimal utilizationPercentage = entity.getCreditLimit().compareTo(BigDecimal.ZERO) > 0 ?
-      entity.getCurrentBalance().multiply(BigDecimal.valueOf(100))
-        .divide(entity.getCreditLimit(), 2, java.math.RoundingMode.HALF_UP) :
-      BigDecimal.ZERO;
+    BigDecimal utilizationPercentage = entity.getCreditLimit().compareTo(BigDecimal.ZERO) > 0
+      ? entity.getCurrentBalance().multiply(BigDecimal.valueOf(PERCENTAGE_MULTIPLIER))
+      .divide(entity.getCreditLimit(), 2, RoundingMode.HALF_UP)
+      : BigDecimal.ZERO;
     response.setUtilizationPercentage(utilizationPercentage.doubleValue());
 
     response.setIsActive(entity.isActive());
@@ -106,7 +123,9 @@ public class CreditCardMapper {
   }
 
   public CustomerCardValidationResponseCardSummaryInner toCardSummary(CreditCard entity) {
-    if (entity == null) return null;
+    if (entity == null) {
+      return null;
+    }
 
     CustomerCardValidationResponseCardSummaryInner summary = new CustomerCardValidationResponseCardSummaryInner();
     summary.setCardId(entity.getId());
@@ -118,13 +137,15 @@ public class CreditCardMapper {
   }
 
   public OverdueProduct toOverdueProduct(CreditCard entity) {
-    if (entity == null) return null;
+    if (entity == null) {
+      return null;
+    }
 
     OverdueProduct overdueProduct = new OverdueProduct();
     overdueProduct.setProductId(entity.getId());
     overdueProduct.setProductType(OverdueProduct.ProductTypeEnum.CREDIT_CARD);
-    overdueProduct.setOverdueAmount(entity.getMinimumPayment() != null ?
-      entity.getMinimumPayment().doubleValue() : entity.getCurrentBalance().doubleValue());
+    overdueProduct.setOverdueAmount(entity.getMinimumPayment() != null
+      ? entity.getMinimumPayment().doubleValue() : entity.getCurrentBalance().doubleValue());
     overdueProduct.setDaysPastDue(entity.getOverdueDays() != null ? entity.getOverdueDays() : 0);
     return overdueProduct;
   }
@@ -154,11 +175,15 @@ public class CreditCardMapper {
       case "CARD_INACTIVE":
         response.setDeclineReason(ChargeAuthorizationResponse.DeclineReasonEnum.CARD_INACTIVE);
         break;
+      default:
+        // No acción específica para otros casos
+        break;
     }
     return response;
   }
 
-  public PaymentProcessResponse toPaymentSuccessResponse(CreditCard card, BigDecimal requestedAmount, BigDecimal actualAmount) {
+  public PaymentProcessResponse toPaymentSuccessResponse(CreditCard card, BigDecimal requestedAmount,
+                                                         BigDecimal actualAmount) {
     PaymentProcessResponse response = new PaymentProcessResponse();
     response.setSuccess(true);
     response.setCardId(card.getId());
@@ -183,7 +208,8 @@ public class CreditCardMapper {
     return response;
   }
 
-  public CustomerCardValidationResponse toCustomerValidationResponse(String customerId, List<CreditCard> activeCards) {
+  public CustomerCardValidationResponse toCustomerValidationResponse(String customerId,
+                                                                     List<CreditCard> activeCards) {
     CustomerCardValidationResponse response = new CustomerCardValidationResponse();
     response.setCustomerId(customerId);
     response.setHasActiveCard(!activeCards.isEmpty());
@@ -214,7 +240,8 @@ public class CreditCardMapper {
     return transactionRequest;
   }
 
-  public ProductEligibilityResponse toProductEligibilityResponse(String customerId, List<OverdueProduct> overdueProducts) {
+  public ProductEligibilityResponse toProductEligibilityResponse(String customerId,
+                                                                 List<OverdueProduct> overdueProducts) {
     ProductEligibilityResponse response = new ProductEligibilityResponse();
     response.setCustomerId(customerId);
     response.setIsEligible(overdueProducts.isEmpty());

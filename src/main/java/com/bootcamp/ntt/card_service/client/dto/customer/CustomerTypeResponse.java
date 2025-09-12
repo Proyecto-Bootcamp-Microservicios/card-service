@@ -1,6 +1,7 @@
 package com.bootcamp.ntt.card_service.client.dto.customer;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+
 import lombok.Data;
 
 @Data
@@ -10,4 +11,6 @@ public class CustomerTypeResponse {
 
   @JsonProperty("customerType")
   private String customerType; // "PERSONAL" o "ENTERPRISE"
+
+  private boolean fallback = false;
 }

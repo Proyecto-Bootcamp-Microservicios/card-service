@@ -1,7 +1,8 @@
 package com.bootcamp.ntt.card_service.client.dto.customer;
 
-import lombok.Data;
 import java.time.OffsetDateTime;
+
+import lombok.Data;
 
 @Data
 public class CustomerResponse {
