@@ -8,6 +8,7 @@ import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.CardConsolidationService;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
+import com.bootcamp.ntt.card_service.service.ExternalServiceWrapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,7 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
   private final DebitCardService debitCardService;
   private final CreditCardService creditCardService;
   private final TransactionServiceClient transactionServiceClient;
+  private final ExternalServiceWrapper externalServiceWrapper;
 
   @Override
   public Mono<CustomerCardsSummaryResponse> getCustomerCardsSummary(String customerId) {
@@ -116,8 +118,7 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
   private Mono<DebitCardsReport> generateDebitCardsReport(LocalDate startDate, LocalDate endDate) {
     return debitCardService.getActiveCardsCount()
       .zipWith(
-        transactionServiceClient.getDebitCardTransactionsSummary(startDate, endDate)
-          .onErrorReturn(createEmptyTransactionsSummary()) // Fallback para MVP
+        externalServiceWrapper.getDebitCardTransactionsSummaryWithCircuitBreaker(startDate, endDate)
       )
       .map(tuple -> {
         Integer activeCards = tuple.getT1();
@@ -164,11 +165,12 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
 
     return determineCardTypeReactive(cardId)
       .flatMap(cardType ->
-        transactionServiceClient.getLastCardMovements(cardId, actualLimit)
+        externalServiceWrapper.getLastCardMovementsWithCircuitBreaker(cardId, actualLimit)
           .collectList()
           .map(transactions -> buildCardMovementsResponse(cardId, cardType, transactions))
       )
-      .doOnSuccess(response -> log.debug("Movements retrieved for card: {}", cardId));
+      .doOnSuccess(response -> log.debug("Movements retrieved for card: {} with {} movements",
+        cardId, response.getTotalCount()));
   }
 
   private Mono<String> determineCardTypeReactive(String cardId) {
@@ -221,7 +223,6 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
       );
     } catch (IllegalArgumentException e) {
       log.warn("Unknown enum value in transaction {}: {}", transaction.getTransactionId(), e.getMessage());
-      // Valores por defecto o manejo específico según tu lógica de negocio
     }
 
     movement.setMerchantInfo(transaction.getMerchantInfo());

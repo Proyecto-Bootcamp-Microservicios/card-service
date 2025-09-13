@@ -5,6 +5,7 @@ import com.bootcamp.ntt.card_service.client.TransactionServiceClient;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.entity.DailyBalance;
+import com.bootcamp.ntt.card_service.enums.CardStatus;
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.exception.TransactionServiceUnavailableException;
@@ -153,31 +154,41 @@ public class CreditCardServiceImpl implements CreditCardService {
   }
 
   private Mono<ChargeAuthorizationResponse> processApprovedCharge(CreditCard card, ChargeAuthorizationRequest request) {
-    double newAvailableCredit = card.getAvailableCredit().doubleValue() - request.getAmount();
-    card.setAvailableCredit(BigDecimal.valueOf(newAvailableCredit));
-    card.setCurrentBalance(card.getCurrentBalance().add(BigDecimal.valueOf(request.getAmount())));
-
+    BigDecimal chargeAmount = BigDecimal.valueOf(request.getAmount());
+    BigDecimal newAvailableCredit = card.getAvailableCredit().subtract(chargeAmount);
+    BigDecimal newCurrentBalance = card.getCurrentBalance().add(chargeAmount);
     String authCode = cardUtils.generateAuthCode();
 
-    // transacción atómica para la tarjeta
+    BigDecimal originalAvailableCredit = card.getAvailableCredit();
+    BigDecimal originalCurrentBalance = card.getCurrentBalance();
+    CardStatus originalStatus = card.getStatus();
+
+    card.setStatus(CardStatus.CHARGE_PENDING);
+
     return creditCardRepository.save(card)
       .flatMap(savedCard -> {
+        // Crear la transacción
         TransactionRequest transactionRequest = creditCardMapper.toTransactionRequest(
           savedCard, request, authCode);
 
         return externalServiceWrapper.createTransactionWithCircuitBreaker(transactionRequest)
-          .then(Mono.fromCallable(() ->
-            creditCardMapper.toChargeApprovedResponse(savedCard, request.getAmount(), authCode)
-          ))
-          // Si falla la transacción, revertimos los cambios en la tarjeta
-          .onErrorResume(transactionError -> {
-            log.error("Transaction failed, reverting card changes for cardId={}",
-              savedCard.getId(), transactionError);
+          .then(Mono.defer(() -> {
+            savedCard.setAvailableCredit(newAvailableCredit);
+            savedCard.setCurrentBalance(newCurrentBalance);
+            savedCard.setStatus(CardStatus.ACTIVE);
 
-            return revertCardChanges(savedCard, request.getAmount())
+            return creditCardRepository.save(savedCard)
+              .map(finalCard -> creditCardMapper.toChargeApprovedResponse(
+                finalCard, request.getAmount(), authCode));
+          }))
+          .onErrorResume(error -> {
+            savedCard.setAvailableCredit(originalAvailableCredit);
+            savedCard.setCurrentBalance(originalCurrentBalance);
+            savedCard.setStatus(originalStatus != null ? originalStatus : CardStatus.ACTIVE);
+
+            return creditCardRepository.save(savedCard)
               .then(Mono.error(new TransactionServiceUnavailableException(
-                "Transaction service failed. Charge authorization reverted."
-                )));
+                "Transaction service failed. Charge authorization reverted.")));
           });
       });
   }

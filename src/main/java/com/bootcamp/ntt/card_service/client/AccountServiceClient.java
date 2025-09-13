@@ -1,9 +1,6 @@
 package com.bootcamp.ntt.card_service.client;
 
-import com.bootcamp.ntt.card_service.client.dto.account.AccountBalanceResponse;
-import com.bootcamp.ntt.card_service.client.dto.account.AccountDebitRequest;
-import com.bootcamp.ntt.card_service.client.dto.account.AccountDetailsResponse;
-import com.bootcamp.ntt.card_service.client.dto.account.AccountTransactionResponse;
+import com.bootcamp.ntt.card_service.client.dto.account.*;
 import com.bootcamp.ntt.card_service.exception.AccountNotFoundException;
 import com.bootcamp.ntt.card_service.exception.AccountServiceException;
 
@@ -110,5 +107,26 @@ public class AccountServiceClient {
       .bodyToMono(AccountTransactionResponse.class)
       .doOnSuccess(response -> log.debug("Account debited successfully: {}", accountId))
       .doOnError(error -> log.error("Error debiting account: {}", error.getMessage()));
+  }
+
+  public Mono<AccountTransactionResponse> creditAccount(String accountId, AccountCreditRequest request) {
+    log.debug("Crediting account: {} with amount: {}", accountId, request.getAmount());
+
+    return webClient
+      .post()
+      .uri(accountServiceUrl + "/accounts/{id}/credit", accountId)
+      .bodyValue(request)
+      .retrieve()
+      .onStatus(HttpStatus::is4xxClientError, response -> {
+        log.warn("Invalid credit request for account: {}", accountId);
+        return Mono.error(new AccountServiceException("Invalid credit request for account: " + accountId));
+      })
+      .onStatus(HttpStatus::is5xxServerError, response -> {
+        log.error("Account service error during credit for account: {}", accountId);
+        return Mono.error(new AccountServiceException("Error processing credit with account service"));
+      })
+      .bodyToMono(AccountTransactionResponse.class)
+      .doOnSuccess(response -> log.debug("Account credited successfully: {}", accountId))
+      .doOnError(error -> log.error("Error crediting account: {}", error.getMessage()));
   }
 }

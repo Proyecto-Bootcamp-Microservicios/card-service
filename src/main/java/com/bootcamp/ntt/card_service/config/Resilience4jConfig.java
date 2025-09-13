@@ -26,6 +26,11 @@ public class Resilience4jConfig {
   }
 
   @Bean
+  public CircuitBreaker accountServiceCircuitBreaker() {
+    return circuitBreakerRegistry.circuitBreaker("account-service");
+  }
+
+  @Bean
   public TimeLimiter customerServiceTimeLimiter() {
     return timeLimiterRegistry.timeLimiter("customer-service");
   }
@@ -33,5 +38,10 @@ public class Resilience4jConfig {
   @Bean
   public TimeLimiter transactionServiceTimeLimiter() {
     return timeLimiterRegistry.timeLimiter("transaction-service");
+  }
+
+  @Bean
+  public TimeLimiter accountServiceTimeLimiter() {
+    return timeLimiterRegistry.timeLimiter("account-service");
   }
 }

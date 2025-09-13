@@ -1,5 +1,6 @@
 package com.bootcamp.ntt.card_service.entity;
 
+import com.bootcamp.ntt.card_service.enums.CardStatus;
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -56,6 +57,9 @@ public abstract class Card {
   @NotNull(message = "El estado de la tarjeta es obligatorio")
   @Field("isActive")
   private boolean isActive;
+
+  @Field("status")
+  private CardStatus status = CardStatus.ACTIVE;;
 
   @CreatedDate
   @Field("createdAt")
