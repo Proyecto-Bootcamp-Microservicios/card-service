@@ -3,15 +3,11 @@ package com.bootcamp.ntt.card_service.delegate;
 import com.bootcamp.ntt.card_service.api.DebitCardsApiDelegate;
 import com.bootcamp.ntt.card_service.exception.BusinessRuleException;
 import com.bootcamp.ntt.card_service.exception.EntityNotFoundException;
-import com.bootcamp.ntt.card_service.model.AssociateAccountRequest;
-import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
-import com.bootcamp.ntt.card_service.model.DebitCardResponse;
-import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
-import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
-import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
-import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
+import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
+import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
 
+import com.bootcamp.ntt.card_service.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,6 +18,8 @@ import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.Optional;
 
 /**
  * Implementación del delegate para la API de tarjetas de débito.
@@ -35,7 +33,8 @@ import reactor.core.publisher.Mono;
 public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
 
   private final DebitCardService debitCardService;
-
+  private final DebitCardMapper debitCardMapper;
+  private final SecurityUtils securityUtils;
   /**
    * Crea una nueva tarjeta de débito para un cliente.
    * Valida los datos del cliente y genera una nueva tarjeta con número único
@@ -50,13 +49,32 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     Mono<DebitCardCreateRequest> cardRequest,
     ServerWebExchange exchange) {
     log.info("Creando nueva tarjeta de débito");
+    return securityUtils.extractAuthHeaders(exchange)
+      .doOnNext(auth -> log.debug(" Auth extracted - customerId: {}, isAdmin: {}",
+        auth.getCustomerId(), auth.isAdmin()))
+      .zipWith(cardRequest.doOnNext(req -> log.debug(" Original request customerId: {}",
+        req.getCustomerId())))
+      .flatMap(tuple -> {
+        var auth = tuple.getT1();
+        var request = tuple.getT2();
+
+        DebitCardCreateRequest securedRequest = debitCardMapper.secureCreateRequest(
+          request,
+          auth.getCustomerId(),
+          auth.isAdmin()
+        );
+
+        return debitCardService.createCard(securedRequest);
+      })
+      .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
+    /*
     return cardRequest
       .doOnNext(request -> log.info("Creando tarjeta para cliente: {}", request.getCustomerId()))
       .flatMap(debitCardService::createCard)
       .map(response -> {
         log.info("Tarjeta de débito creada con ID: {}", response.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
-      });
+      });*/
   }
 
   /**
@@ -73,12 +91,25 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     String customerId,
     Boolean isActive,
     ServerWebExchange exchange) {
-    Boolean activeFilter = (isActive != null) ? isActive : true;
+    log.info("Recuperando tarjetas de débito");
+    return securityUtils.extractAuthHeaders(exchange)
+      .map(auth -> {
+        Boolean activeFilter = Optional.ofNullable(isActive).orElse(true);
+        String resolvedCustomerId = auth.isAdmin() ? customerId : auth.getCustomerId();
+
+        Flux<DebitCardResponse> cards = (resolvedCustomerId != null)
+          ? debitCardService.getDebitCardsByActiveAndCustomer(activeFilter, resolvedCustomerId)
+          : debitCardService.getDebitCardsByActive(activeFilter);
+
+        return ResponseEntity.ok(cards);
+      });
+
+    /*Boolean activeFilter = (isActive != null) ? isActive : true;
     Flux<DebitCardResponse> cards = (customerId != null)
       ? debitCardService.getDebitCardsByActiveAndCustomer(activeFilter, customerId)
       : debitCardService.getDebitCardsByActive(activeFilter);
     cards = cards.doOnComplete(() -> log.info("Tarjetas de débito recuperadas correctamente"));
-    return Mono.just(ResponseEntity.ok(cards));
+    return Mono.just(ResponseEntity.ok(cards));*/
   }
 
   /**
@@ -93,6 +124,13 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     String id,
     ServerWebExchange exchange) {
     log.info("Obteniendo tarjeta de débito por ID: {}", id);
+    return securityUtils.validateReadAccess(
+        debitCardService.getCardById(id),
+        DebitCardResponse::getCustomerId,
+        exchange)
+      .map(ResponseEntity::ok)
+      .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
+    /*
     return debitCardService
       .getCardById(id)
       .map(response -> {
@@ -102,7 +140,7 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
       .switchIfEmpty(Mono.fromCallable(() -> {
         log.warn("Tarjeta de débito no encontrada con ID: {}", id);
         return ResponseEntity.notFound().build();
-      }));
+      }));*/
   }
 
   /**
@@ -120,13 +158,19 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     Mono<DebitCardUpdateRequest> cardRequest,
     ServerWebExchange exchange) {
     log.info("Actualizando tarjeta de débito con ID: {}", id);
+    return securityUtils.validateAdminOnly(exchange)
+      .then(cardRequest)
+      .flatMap(request -> debitCardService.updateCard(id, request))
+      .map(ResponseEntity::ok);
+
+    /*
     return cardRequest
       .doOnNext(request -> log.info("Solicitud de actualización para tarjeta de débito ID: {}", id))
       .flatMap(request -> debitCardService.updateCard(id, request))
       .map(response -> {
         log.info("Tarjeta de débito actualizada correctamente: {}", response.getId());
         return ResponseEntity.ok(response);
-      });
+      });*/
   }
 
   /**
@@ -141,13 +185,16 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
   public Mono<ResponseEntity<Void>> deleteDebitCard(
     String id,
     ServerWebExchange exchange) {
-    log.info("Eliminando tarjeta de débito con ID: {}", id);
+    return securityUtils.validateAdminOnly(exchange)
+      .then(debitCardService.deleteCard(id))
+      .thenReturn(ResponseEntity.noContent().build());
+    /*log.info("Eliminando tarjeta de débito con ID: {}", id);
     return debitCardService
       .deleteCard(id)
       .then(Mono.fromCallable(() -> {
         log.info("Tarjeta de débito eliminada correctamente: {}", id);
         return ResponseEntity.noContent().build();
-      }));
+      }));*/
   }
 
   /**
@@ -163,12 +210,15 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     String id,
     ServerWebExchange exchange) {
     log.info("Desactivando tarjeta de débito con ID: {}", id);
-    return debitCardService
+    return securityUtils.validateAdminOnly(exchange)
+      .then(debitCardService.deactivateCard(id))
+      .map(ResponseEntity::ok);
+    /*return debitCardService
       .deactivateCard(id)
       .map(response -> {
         log.info("Tarjeta de débito desactivada correctamente: {}", response.getId());
         return ResponseEntity.ok(response);
-      });
+      });*/
   }
 
   /**
@@ -184,12 +234,15 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     String id,
     ServerWebExchange exchange) {
     log.info("Activando tarjeta de débito con ID: {}", id);
-    return debitCardService
+    return securityUtils.validateAdminOnly(exchange)
+      .then(debitCardService.activateCard(id))
+      .map(ResponseEntity::ok);
+    /*return debitCardService
       .activateCard(id)
       .map(response -> {
         log.info("Tarjeta de débito activada correctamente: {}", response.getId());
         return ResponseEntity.ok(response);
-      });
+      });*/
   }
 
   /**
@@ -209,13 +262,22 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     ServerWebExchange exchange) {
 
     log.info("Associating account to debit card ID: {}", id);
-
-    return associateAccountRequest
+    return securityUtils.validateReadAccess(
+        debitCardService.getCardById(id),
+        DebitCardResponse::getCustomerId,
+        exchange)
+      .then(associateAccountRequest)
       .flatMap(request -> debitCardService.associateAccountToDebitCard(id, request))
       .map(response -> {
         log.info("Account associated successfully to debit card: {}", id);
         return ResponseEntity.ok(response);
       });
+    /*return associateAccountRequest
+      .flatMap(request -> debitCardService.associateAccountToDebitCard(id, request))
+      .map(response -> {
+        log.info("Account associated successfully to debit card: {}", id);
+        return ResponseEntity.ok(response);
+      });*/
   }
 
   /**
@@ -236,7 +298,17 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
 
     log.info("Processing debit card transaction for card: {}", cardNumber);
 
-    return debitPurchaseRequest
+    return securityUtils.validateReadAccess(
+        debitCardService.getDebitCardByCardNumber(cardNumber),
+        DebitCardResponse::getCustomerId,
+        exchange)
+      .then(debitPurchaseRequest)
+      .flatMap(request -> debitCardService.processDebitCardPurchase(cardNumber, request))
+      .map(response -> {
+        log.info("Debit transaction processed successfully for card: {}", cardNumber);
+        return ResponseEntity.ok(response);
+      });
+    /*return debitPurchaseRequest
       .flatMap(request -> debitCardService.processDebitCardPurchase(cardNumber, request))
       .map(response -> {
         log.info("Debit transaction processed successfully for card: {}", cardNumber);
@@ -252,7 +324,7 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
         }
 
         return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
-      });
+      });*/
   }
 
   /**
@@ -270,8 +342,14 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     ServerWebExchange exchange) {
 
     log.info("Getting primary account balance for debit card: {}", cardId);
-
-    return debitCardService.getDebitCardPrimaryAccountBalance(cardId)
+    return securityUtils.validateReadAccess(
+        debitCardService.getCardById(cardId),
+        DebitCardResponse::getCustomerId,
+        exchange)
+      .then(debitCardService.getDebitCardPrimaryAccountBalance(cardId))
       .map(ResponseEntity::ok);
   }
+    /*return debitCardService.getDebitCardPrimaryAccountBalance(cardId)
+      .map(ResponseEntity::ok);*/
+
 }

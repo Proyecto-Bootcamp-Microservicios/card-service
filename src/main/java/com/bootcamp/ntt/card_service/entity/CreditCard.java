@@ -26,7 +26,7 @@ public class CreditCard extends Card {
 
   @NotNull(message = "El tipo de tarjeta de crédito es obligatorio")
   @Field("creditCardType")
-  private CreditCardType creditCardType; // PERSONAL, ENTERPRISE
+  private CreditCardType creditCardType;
 
   @NotNull(message = "El límite de crédito es obligatorio")
   @DecimalMin(value = "0.01", message = "El límite de crédito debe ser mayor a 0")

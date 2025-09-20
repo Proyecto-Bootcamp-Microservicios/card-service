@@ -9,6 +9,8 @@ public interface DebitCardService {
 
   Mono<DebitCardResponse> getCardById(String id);
 
+  Mono<DebitCardResponse> getDebitCardByCardNumber(String cardNumber);
+
   Flux<DebitCardResponse> getDebitCardsByActiveAndCustomer(Boolean isActive, String customerId);
 
   Mono<DebitCardResponse> createCard(DebitCardCreateRequest cardRequest);

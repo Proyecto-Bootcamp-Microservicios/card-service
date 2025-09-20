@@ -2,6 +2,7 @@ package com.bootcamp.ntt.card_service.mapper;
 
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
+import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.enums.CreditCardType;
 import com.bootcamp.ntt.card_service.model.ChargeAuthorizationRequest;
 import com.bootcamp.ntt.card_service.model.ChargeAuthorizationResponse;
@@ -23,11 +24,14 @@ import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 @Component
+@Slf4j
 public class CreditCardMapper {
 
   private static final int PERCENTAGE_MULTIPLIER = 100;
@@ -39,6 +43,7 @@ public class CreditCardMapper {
 
     CreditCard card = new CreditCard();
     card.setCardNumber(cardNumber);
+    card.setType(CardType.CREDIT);
     card.setCustomerId(dto.getCustomerId());
     card.setCreditCardType(CreditCardType.valueOf(customerType));
     card.setCreditLimit(BigDecimal.valueOf(dto.getCreditLimit()));
@@ -48,6 +53,10 @@ public class CreditCardMapper {
     card.setCurrentBalance(
       dto.getCurrentBalance() != null ? BigDecimal.valueOf(dto.getCurrentBalance()) : BigDecimal.ZERO
     );
+    card.setPaymentDueDate(null);
+    card.setMinimumPayment(BigDecimal.valueOf(500));
+    card.setIsOverdue(false);
+    card.setOverdueDays(0);
     card.setActive(true);
     return card;
   }
@@ -90,9 +99,12 @@ public class CreditCardMapper {
     response.setCurrentBalance(entity.getCurrentBalance().doubleValue());
     response.setIsActive(entity.isActive());
     response.setPaymentDueDate(entity.getPaymentDueDate());
-    response.setMinimumPayment(entity.getMinimumPayment().doubleValue());
-    response.setIsOverdue(entity.getIsOverdue());
-    response.setOverdueDays(entity.getOverdueDays());
+    response.setMinimumPayment(entity.getMinimumPayment() != null ?
+      entity.getMinimumPayment().doubleValue() : 0.0);
+    response.setIsOverdue(entity.getIsOverdue() != null ?
+      entity.getIsOverdue() : false);
+    response.setOverdueDays(entity.getOverdueDays() != null ?
+      entity.getOverdueDays() : 0);
     response.setCreatedAt(entity.getCreatedAt() != null ? entity.getCreatedAt().atOffset(ZoneOffset.UTC) : null);
     response.setUpdatedAt(entity.getUpdatedAt() != null ? entity.getUpdatedAt().atOffset(ZoneOffset.UTC) : null);
 
@@ -275,5 +287,33 @@ public class CreditCardMapper {
     response.setGeneratedAt(java.time.OffsetDateTime.now());
 
     return response;
+  }
+
+  public CreditCardCreateRequest secureCreateRequest(
+    CreditCardCreateRequest originalRequest,
+    String authenticatedCustomerId,
+    boolean isAdmin) {
+
+    if (originalRequest == null) {
+      return null;
+    }
+
+    if (isAdmin) {
+      return originalRequest;
+    } else {
+      CreditCardCreateRequest securedRequest = new CreditCardCreateRequest();
+      securedRequest.setCustomerId(authenticatedCustomerId);
+      securedRequest.setCreditLimit(
+        Optional.ofNullable(originalRequest.getCreditLimit()).orElse(0.0));
+
+      securedRequest.setAvailableCredit(
+        Optional.ofNullable(originalRequest.getAvailableCredit()).orElse(0.0));
+
+      securedRequest.setCurrentBalance(
+        Optional.ofNullable(originalRequest.getCurrentBalance()).orElse(0.0));
+      log.debug("Customer request - original customerId: {}, secured customerId: {}",
+        originalRequest.getCustomerId(), authenticatedCustomerId);
+      return securedRequest;
+    }
   }
 }

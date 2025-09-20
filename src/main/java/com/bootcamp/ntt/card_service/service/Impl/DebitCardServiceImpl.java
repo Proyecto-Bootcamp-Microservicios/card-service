@@ -73,6 +73,20 @@ public class DebitCardServiceImpl implements DebitCardService {
   }
 
   @Override
+  public Mono<DebitCardResponse> getDebitCardByCardNumber(String cardNumber) {
+    log.debug("Getting debit card by cardNumber: {}", cardNumber);
+    return debitCardRepository.findByCardNumber(cardNumber)
+      .map(debitCardMapper::toResponse)
+      .doOnSuccess(credit -> {
+        if (credit != null) {
+          log.debug("Card found with cardNumber: {}", cardNumber);
+        } else {
+          log.debug("Card not found with cardNumber: {}", cardNumber);
+        }
+      });
+  }
+
+  @Override
   public Mono<DebitCardResponse> createCard(DebitCardCreateRequest cardRequest) {
     log.debug("Creating debit card for customer: {}", cardRequest.getCustomerId());
 

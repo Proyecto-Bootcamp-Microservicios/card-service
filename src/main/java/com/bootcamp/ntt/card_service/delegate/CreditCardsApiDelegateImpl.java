@@ -1,6 +1,9 @@
 package com.bootcamp.ntt.card_service.delegate;
 
 import com.bootcamp.ntt.card_service.api.CreditCardsApiDelegate;
+import com.bootcamp.ntt.card_service.entity.CreditCard;
+import com.bootcamp.ntt.card_service.exception.AccessDeniedException;
+import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.model.ChargeAuthorizationRequest;
 import com.bootcamp.ntt.card_service.model.ChargeAuthorizationResponse;
 import com.bootcamp.ntt.card_service.model.CreditCardBalanceResponse;
@@ -11,8 +14,10 @@ import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponse;
 import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponse;
 import com.bootcamp.ntt.card_service.model.PaymentProcessRequest;
 import com.bootcamp.ntt.card_service.model.PaymentProcessResponse;
+import com.bootcamp.ntt.card_service.security.AuthHeaders;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
 
+import com.bootcamp.ntt.card_service.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,6 +28,8 @@ import org.springframework.web.server.ServerWebExchange;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+
+import java.util.Optional;
 
 /**
  * Implementación del delegate para la API de tarjetas de crédito.
@@ -36,6 +43,8 @@ import reactor.core.publisher.Mono;
 public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
   private final CreditCardService creditCardService;
+  private final SecurityUtils securityUtils;
+  private final CreditCardMapper creditCardMapper;
 
   /**
    * Crea una nueva tarjeta de crédito para un cliente.
@@ -50,15 +59,24 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     Mono<CreditCardCreateRequest> cardRequest,
     ServerWebExchange exchange) {
 
-    log.info("Creating new card - Request received");
+    return securityUtils.extractAuthHeaders(exchange)
+      .doOnNext(auth -> log.debug(" Auth extracted - customerId: {}, isAdmin: {}",
+        auth.getCustomerId(), auth.isAdmin()))
+      .zipWith(cardRequest.doOnNext(req -> log.debug(" Original request customerId: {}",
+        req.getCustomerId())))
+      .flatMap(tuple -> {
+        var auth = tuple.getT1();
+        var request = tuple.getT2();
 
-    return cardRequest
-      .doOnNext(request -> log.info("Creating card for customer: {}", request.getCustomerId()))
-      .flatMap(creditCardService::createCard)
-      .map(response -> {
-        log.info("Card created successfully with ID: {}", response.getId());
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-      });
+        CreditCardCreateRequest securedRequest = creditCardMapper.secureCreateRequest(
+          request,
+          auth.getCustomerId(),
+          auth.isAdmin()
+        );
+
+        return creditCardService.createCard(securedRequest);
+      })
+      .map(response -> ResponseEntity.status(HttpStatus.CREATED).body(response));
   }
 
   /**
@@ -72,19 +90,19 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    */
   @Override
   public Mono<ResponseEntity<Flux<CreditCardResponse>>> getAllCreditCards(
-    String customerId,
-    Boolean isActive,
-    ServerWebExchange exchange) {
+    String customerId, Boolean isActive, ServerWebExchange exchange) {
 
-    Boolean activeFilter = (isActive != null) ? isActive : true;
+    return securityUtils.extractAuthHeaders(exchange)
+      .map(auth -> {
+        Boolean activeFilter = Optional.ofNullable(isActive).orElse(true);
+        String resolvedCustomerId = auth.isAdmin() ? customerId : auth.getCustomerId();
 
-    Flux<CreditCardResponse> cards = (customerId != null)
-      ? creditCardService.getCardsByActiveAndCustomer(activeFilter, customerId)
-      : creditCardService.getCardsByActive(activeFilter);
+        Flux<CreditCardResponse> cards = (resolvedCustomerId != null)
+          ? creditCardService.getCardsByActiveAndCustomer(activeFilter, resolvedCustomerId)
+          : creditCardService.getCardsByActive(activeFilter);
 
-    cards = cards.doOnComplete(() -> log.info("Cards retrieved successfully"));
-
-    return Mono.just(ResponseEntity.ok(cards));
+        return ResponseEntity.ok(cards);
+      });
   }
 
   /**
@@ -95,22 +113,13 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    * @return Mono con ResponseEntity que contiene la tarjeta encontrada o 404 si no existe
    */
   @Override
-  public Mono<ResponseEntity<CreditCardResponse>> getCreditCardById(
-    String id,
-    ServerWebExchange exchange) {
-
-    log.info("Getting card by ID: {}", id);
-
-    return creditCardService
-      .getCardById(id)
-      .map(response -> {
-        log.info("Card found: {}", response.getId());
-        return ResponseEntity.ok(response);
-      })
-      .switchIfEmpty(Mono.fromCallable(() -> {
-        log.warn("Card not found with ID: {}", id);
-        return ResponseEntity.notFound().build();
-      }));
+  public Mono<ResponseEntity<CreditCardResponse>> getCreditCardById(String id, ServerWebExchange exchange) {
+    return securityUtils.validateReadAccess(
+        creditCardService.getCardById(id),
+        CreditCardResponse::getCustomerId,
+        exchange)
+      .map(ResponseEntity::ok)
+      .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
   }
 
   /**
@@ -124,19 +133,12 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> updateCreditCard(
-    String id,
-    Mono<CreditCardUpdateRequest> cardRequest,
-    ServerWebExchange exchange) {
+    String id, Mono<CreditCardUpdateRequest> cardRequest, ServerWebExchange exchange) {
 
-    log.info("Updating card with ID: {}", id);
-
-    return cardRequest
-      .doOnNext(request -> log.info("Update request for card ID: {}", id))
+    return securityUtils.validateAdminOnly(exchange)
+      .then(cardRequest)
       .flatMap(request -> creditCardService.updateCard(id, request))
-      .map(response -> {
-        log.info("Card updated successfully: {}", response.getId());
-        return ResponseEntity.ok(response);
-      });
+      .map(ResponseEntity::ok);
   }
 
   /**
@@ -148,18 +150,10 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    * @return Mono con ResponseEntity vacío (204 No Content) si la eliminación fue exitosa
    */
   @Override
-  public Mono<ResponseEntity<Void>> deleteCreditCard(
-    String id,
-    ServerWebExchange exchange) {
-
-    log.info("Deleting card with ID: {}", id);
-
-    return creditCardService
-      .deleteCard(id)
-      .then(Mono.fromCallable(() -> {
-        log.info("Card deleted successfully: {}", id);
-        return ResponseEntity.noContent().build();
-      }));
+  public Mono<ResponseEntity<Void>> deleteCreditCard(String id, ServerWebExchange exchange) {
+    return securityUtils.validateAdminOnly(exchange)
+      .then(creditCardService.deleteCard(id))
+      .thenReturn(ResponseEntity.noContent().build());
   }
 
   /**
@@ -171,18 +165,10 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    * @return Mono con ResponseEntity que contiene la tarjeta desactivada
    */
   @Override
-  public Mono<ResponseEntity<CreditCardResponse>> deactivateCreditCard(
-    String id,
-    ServerWebExchange exchange) {
-
-    log.info("Deactivating card with ID: {}", id);
-
-    return creditCardService
-      .deactivateCard(id)
-      .map(response -> {
-        log.info("Card deactivated successfully: {}", response.getId());
-        return ResponseEntity.ok(response);
-      });
+  public Mono<ResponseEntity<CreditCardResponse>> deactivateCreditCard(String id, ServerWebExchange exchange) {
+    return securityUtils.validateAdminOnly(exchange)
+      .then(creditCardService.deactivateCard(id))
+      .map(ResponseEntity::ok);
   }
 
   /**
@@ -194,18 +180,10 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    * @return Mono con ResponseEntity que contiene la tarjeta activada
    */
   @Override
-  public Mono<ResponseEntity<CreditCardResponse>> activateCreditCard(
-    String id,
-    ServerWebExchange exchange) {
-
-    log.info("Activating card with ID: {}", id);
-
-    return creditCardService
-      .activateCard(id)
-      .map(response -> {
-        log.info("Card activated successfully: {}", response.getId());
-        return ResponseEntity.ok(response);
-      });
+  public Mono<ResponseEntity<CreditCardResponse>> activateCreditCard(String id, ServerWebExchange exchange) {
+    return securityUtils.validateAdminOnly(exchange)
+      .then(creditCardService.activateCard(id))
+      .map(ResponseEntity::ok);
   }
 
   /**
@@ -223,14 +201,21 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     Mono<ChargeAuthorizationRequest> chargeAuthorizationRequest,
     ServerWebExchange exchange) {
 
-    log.info("Authorizing charge for card ID: {}", cardNumber);
+    log.info("Authorizing charge for card: {}", cardNumber);
 
-    return chargeAuthorizationRequest
-      .flatMap(request -> creditCardService.authorizeCharge(cardNumber, request))
+    return creditCardService.getCardByCardNumber(cardNumber)
+      .flatMap(card -> securityUtils.validateReadAccess(card.getCustomerId(), exchange)
+        .thenReturn(card))
+      .flatMap(card -> chargeAuthorizationRequest
+        .flatMap(request -> creditCardService.authorizeCharge(cardNumber, request)))
       .map(response -> {
-        log.info("Charge authorized for card {}", cardNumber);
+        log.info("Charge authorized for card: {}", cardNumber);
         return ResponseEntity.ok(response);
-      });
+      })
+      .switchIfEmpty(Mono.fromCallable(() -> {
+        log.warn("Card not found: {}", cardNumber);
+        return ResponseEntity.notFound().build();
+      }));
   }
 
   /**
@@ -274,13 +259,25 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
   public Mono<ResponseEntity<CreditCardBalanceResponse>> getCardBalance(
     String cardNumber,
     ServerWebExchange exchange) {
+
     log.info("Getting balance for card: {}", cardNumber);
+
     return creditCardService.getCardBalance(cardNumber)
+      .flatMap(balanceResponse -> {
+        // Necesitarías obtener el customerId de la tarjeta para validar
+        return creditCardService.getCardByCardNumber(cardNumber)
+          .flatMap(card -> securityUtils.validateReadAccess(card.getCustomerId(), exchange)
+            .thenReturn(balanceResponse));
+      })
       .map(response -> {
         log.info("Balance retrieved for card {}: available {}, current {}",
           cardNumber, response.getAvailableCredit(), response.getCurrentBalance());
         return ResponseEntity.ok(response);
-      });
+      })
+      .switchIfEmpty(Mono.fromCallable(() -> {
+        log.warn("Card not found: {}", cardNumber);
+        return ResponseEntity.notFound().build();
+      }));
   }
 
   /**
@@ -326,16 +323,19 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Getting daily averages for customer: {} for {}/{}", customerId, month, year);
 
-    return creditCardService
-      .getCustomerDailyAverages(customerId, year, month)
-      .map(response -> {
-        log.info("Daily averages retrieved for customer {}: {} products found",
-          customerId, response.getProducts().size());
-        return ResponseEntity.ok(response);
-      })
-      .switchIfEmpty(Mono.fromCallable(() -> {
-        log.warn("No daily averages found for customer: {} for {}/{}", customerId, month, year);
-        return ResponseEntity.notFound().build();
-      }));
+    return securityUtils.validateAdminOnly(exchange)
+      .then(
+        creditCardService.getCustomerDailyAverages(customerId, year, month)
+          .map(response -> {
+            log.info("Daily averages retrieved for customer {}: {} products found",
+              customerId, response.getProducts().size());
+            return ResponseEntity.ok(response);
+          })
+          .switchIfEmpty(Mono.fromCallable(() -> {
+            log.warn("No daily averages found for customer: {} for {}/{}", customerId, month, year);
+            return ResponseEntity.notFound().build();
+          }))
+      );
+
   }
 }

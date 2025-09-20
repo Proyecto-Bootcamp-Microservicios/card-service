@@ -13,6 +13,8 @@ public interface CreditCardService {
 
   Mono<CreditCardResponse> getCardById(String id);
 
+  Mono<CreditCardResponse> getCardByCardNumber(String cardNumber);
+
   Flux<CreditCardResponse> getCardsByActiveAndCustomer(Boolean isActive, String customerId);
 
   Mono<CreditCardResponse> createCard(CreditCardCreateRequest cardRequest);

@@ -72,6 +72,20 @@ public class CreditCardServiceImpl implements CreditCardService {
   }
 
   @Override
+  public Mono<CreditCardResponse> getCardByCardNumber(String cardNumber) {
+    log.debug("Getting credit card by cardNumber: {}", cardNumber);
+    return creditCardRepository.findByCardNumber(cardNumber)
+      .map(creditCardMapper::toResponse)
+      .doOnSuccess(credit -> {
+        if (credit != null) {
+          log.debug("Card found with cardNumber: {}", cardNumber);
+        } else {
+          log.debug("Card not found with cardNumber: {}", cardNumber);
+        }
+      });
+  }
+
+  @Override
   public Mono<CreditCardResponse> createCard(CreditCardCreateRequest cardRequest) {
     log.debug("Creating card for customer: {}", cardRequest.getCustomerId());
 
@@ -191,24 +205,6 @@ public class CreditCardServiceImpl implements CreditCardService {
                 "Transaction service failed. Charge authorization reverted.")));
           });
       });
-  }
-
-  private Mono<CreditCard> revertCardChanges(CreditCard card, double amount) {
-    // Revertimos los cambios en el crédito disponible y balance
-    double revertedAvailableCredit = card.getAvailableCredit().doubleValue() + amount;
-    card.setAvailableCredit(BigDecimal.valueOf(revertedAvailableCredit));
-    card.setCurrentBalance(card.getCurrentBalance().subtract(BigDecimal.valueOf(amount)));
-
-    return creditCardRepository.save(card)
-      .doOnSuccess(revertedCard -> log.info("Card changes reverted for cardId={}", card.getId()))
-      .doOnError(error -> log.error("Failed to revert card changes for cardId={}",
-        card.getId(), error));
-  }
-
-  private Mono<Void> createTransactionRecord(CreditCard card, ChargeAuthorizationRequest request, String authCode) {
-    TransactionRequest transactionRequest = creditCardMapper.toTransactionRequest(card, request, authCode);
-
-    return externalServiceWrapper.createTransactionWithCircuitBreaker(transactionRequest);
   }
 
   public Mono<String> generateUniqueCardNumber() {
@@ -342,7 +338,6 @@ public class CreditCardServiceImpl implements CreditCardService {
   public Mono<ProductEligibilityResponse> checkCustomerProductEligibility(String customerId) {
     log.debug("Checking product eligibility for customer: {}", customerId);
 
-    // CAMBIO: usar wrapper con circuit breaker
     return externalServiceWrapper.getCustomerWithCircuitBreaker(customerId)
       .flatMap(customer -> getCustomerEligibilityStatus(customerId))
       .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",

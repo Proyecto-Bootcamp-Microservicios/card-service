@@ -6,18 +6,14 @@ import com.bootcamp.ntt.card_service.client.dto.account.AccountUsage;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.DebitCard;
-import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
-import com.bootcamp.ntt.card_service.model.DebitCardResponse;
-import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
-import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
-import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
-import com.bootcamp.ntt.card_service.model.DebitPurchaseResponseAccountsUsedInner;
-import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
+import com.bootcamp.ntt.card_service.enums.CardType;
+import com.bootcamp.ntt.card_service.model.*;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
@@ -35,6 +31,7 @@ public class DebitCardMapper {
     card.setCustomerId(dto.getCustomerId());
     card.setPrimaryAccountId(dto.getPrimaryAccountId());
     card.setAssociatedAccountIds(dto.getAssociatedAccountIds());
+    card.setType(CardType.DEBIT);
     card.setActive(true);
     return card;
   }
@@ -184,5 +181,27 @@ public class DebitCardMapper {
     transactionRequest.setDescription(description);*/
 
     return transactionRequest;
+  }
+
+  public DebitCardCreateRequest secureCreateRequest(
+    DebitCardCreateRequest originalRequest,
+    String authenticatedCustomerId,
+    boolean isAdmin) {
+
+    if (originalRequest == null) {
+      return null;
+    }
+
+    if (isAdmin) {
+      return originalRequest;
+    } else {
+      DebitCardCreateRequest securedRequest = new DebitCardCreateRequest();
+      securedRequest.setCustomerId(authenticatedCustomerId);
+
+      securedRequest.setCustomerId(originalRequest.getCustomerId());
+      securedRequest.setPrimaryAccountId(originalRequest.getPrimaryAccountId());
+      securedRequest.setAssociatedAccountIds(originalRequest.getAssociatedAccountIds());
+      return securedRequest;
+    }
   }
 }

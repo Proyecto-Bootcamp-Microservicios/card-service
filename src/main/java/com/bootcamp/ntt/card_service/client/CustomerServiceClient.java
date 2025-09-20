@@ -22,7 +22,7 @@ public class CustomerServiceClient {
 
   private final WebClient webClient;
 
-  @Value("${services.customer.base-url:http://localhost:8080}")
+  @Value("${services.customer.service-name:customer-service}")
   private String customerServiceUrl;
 
   public Mono<CustomerResponse> getCustomer(String customerId) {

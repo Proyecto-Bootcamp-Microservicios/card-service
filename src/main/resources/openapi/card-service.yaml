@@ -5,7 +5,7 @@ info:
   description: API for managing debit & credit cards
 
 servers:
-  - url: http://localhost:8081/api/v1
+  - url: /api/v1
 
 paths:
   /credit-cards:
@@ -834,7 +834,6 @@ components:
           format: double
           example: 2000
       required:
-        - customerId
         - creditLimit
 
     CreditCardUpdateRequest:
@@ -1140,8 +1139,8 @@ components:
                 example: "1234-5678-9123-4567"
               type:
                 type: string
-                enum: [ "PERSONAL", "ENTERPRISE" ]
-                example: "PERSONAL"
+                enum: [ "CREDIT", "DEBIT" ]
+                example: "CREDIT"
               creditLimit:
                 type: number
                 format: double
