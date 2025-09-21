@@ -4,25 +4,13 @@ import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.enums.CardType;
 import com.bootcamp.ntt.card_service.enums.CreditCardType;
-import com.bootcamp.ntt.card_service.model.ChargeAuthorizationRequest;
-import com.bootcamp.ntt.card_service.model.ChargeAuthorizationResponse;
-import com.bootcamp.ntt.card_service.model.CreditCardBalanceResponse;
-import com.bootcamp.ntt.card_service.model.CreditCardCreateRequest;
-import com.bootcamp.ntt.card_service.model.CreditCardResponse;
-import com.bootcamp.ntt.card_service.model.CreditCardUpdateRequest;
-import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponse;
-import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponseCardSummaryInner;
-import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponse;
-import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponsePeriod;
-import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponseProductsInner;
-import com.bootcamp.ntt.card_service.model.OverdueProduct;
-import com.bootcamp.ntt.card_service.model.PaymentProcessResponse;
-import com.bootcamp.ntt.card_service.model.ProductEligibilityResponse;
+import com.bootcamp.ntt.card_service.model.*;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -288,7 +276,31 @@ public class CreditCardMapper {
 
     return response;
   }
+  public CreditCardSummary toCreditCardSummary(CreditCardResponse cardResponse) {
+    if (cardResponse == null) {
+      return null;
+    }
 
+    CreditCardSummary summary = new CreditCardSummary();
+    summary.setCardId(cardResponse.getId());
+    summary.setCardNumber(cardResponse.getCardNumber());
+    summary.setAvailableCredit(cardResponse.getAvailableCredit() != null ?
+      BigDecimal.valueOf(cardResponse.getAvailableCredit()) : BigDecimal.ZERO);
+    summary.setCurrentBalance(cardResponse.getCurrentBalance() != null ?
+      BigDecimal.valueOf(cardResponse.getCurrentBalance()) : BigDecimal.ZERO);
+    summary.setIsActive(cardResponse.getIsActive());
+    return summary;
+  }
+
+  public List<CreditCardSummary> toCreditCardSummaryList(List<CreditCardResponse> creditCards) {
+    if (creditCards == null) {
+      return Collections.emptyList();
+    }
+
+    return creditCards.stream()
+      .map(this::toCreditCardSummary)
+      .collect(Collectors.toList());
+  }
   public CreditCardCreateRequest secureCreateRequest(
     CreditCardCreateRequest originalRequest,
     String authenticatedCustomerId,

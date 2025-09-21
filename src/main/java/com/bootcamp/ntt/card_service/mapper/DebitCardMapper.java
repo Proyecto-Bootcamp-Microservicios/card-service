@@ -12,6 +12,7 @@ import com.bootcamp.ntt.card_service.model.*;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -182,7 +183,28 @@ public class DebitCardMapper {
 
     return transactionRequest;
   }
+  public DebitCardSummary toDebitCardSummary(DebitCardResponse cardResponse) {
+    if (cardResponse == null) {
+      return null;
+    }
 
+    DebitCardSummary summary = new DebitCardSummary();
+    summary.setCardId(cardResponse.getId());
+    summary.setCardNumber(cardResponse.getCardNumber());
+    summary.setPrimaryAccountId(cardResponse.getPrimaryAccountId());
+    summary.setIsActive(cardResponse.getIsActive());
+    return summary;
+  }
+
+  public List<DebitCardSummary> toDebitCardSummaryList(List<DebitCardResponse> debitCards) {
+    if (debitCards == null) {
+      return Collections.emptyList();
+    }
+
+    return debitCards.stream()
+      .map(this::toDebitCardSummary)
+      .collect(Collectors.toList());
+  }
   public DebitCardCreateRequest secureCreateRequest(
     DebitCardCreateRequest originalRequest,
     String authenticatedCustomerId,

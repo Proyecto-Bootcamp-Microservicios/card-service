@@ -338,16 +338,16 @@ public class CreditCardServiceImpl implements CreditCardService {
   public Mono<ProductEligibilityResponse> checkCustomerProductEligibility(String customerId) {
     log.debug("Checking product eligibility for customer: {}", customerId);
 
-    return externalServiceWrapper.getCustomerWithCircuitBreaker(customerId)
+    /*return externalServiceWrapper.getCustomerWithCircuitBreaker(customerId)
       .flatMap(customer -> getCustomerEligibilityStatus(customerId))
       .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",
         customerId, response.getIsEligible()))
       .doOnError(error -> log.error("Error checking eligibility for customer {}: {}",
-        customerId, error.getMessage()));
+        customerId, error.getMessage()));*/
     // Para pruebas locales, omite la llamada externa:
-    /*return getCustomerEligibilityStatus(customerId)
+    return getCustomerEligibilityStatus(customerId)
       .doOnSuccess(response -> log.debug("Eligibility checked for customer: {} - Eligible: {}",
-        customerId, response.getIsEligible()));*/
+        customerId, response.getIsEligible()));
   }
 
   private Mono<ProductEligibilityResponse> getCustomerEligibilityStatus(String customerId) {
@@ -365,6 +365,7 @@ public class CreditCardServiceImpl implements CreditCardService {
       .doOnNext(overdueProduct -> log.debug("Found overdue product: {} for customer: {}",
         overdueProduct.getProductId(), customerId));
   }
+
 
 
   // Método auxiliar que puedes llamar periódicamente o al consultar

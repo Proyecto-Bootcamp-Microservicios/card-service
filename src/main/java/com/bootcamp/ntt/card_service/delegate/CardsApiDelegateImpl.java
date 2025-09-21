@@ -3,10 +3,12 @@ package com.bootcamp.ntt.card_service.delegate;
 import com.bootcamp.ntt.card_service.api.CardsApiDelegate;
 import com.bootcamp.ntt.card_service.model.CardMovementsResponse;
 import com.bootcamp.ntt.card_service.model.CardsPeriodicReportResponse;
+import com.bootcamp.ntt.card_service.model.CustomerCardsSummaryResponse;
 import com.bootcamp.ntt.card_service.service.CardConsolidationService;
 
 import java.time.LocalDate;
 
+import com.bootcamp.ntt.card_service.utils.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,6 +30,7 @@ import reactor.core.publisher.Mono;
 public class CardsApiDelegateImpl implements CardsApiDelegate {
 
   private final CardConsolidationService cardConsolidationService;
+  private final SecurityUtils securityUtils;
 
   /**
    * Genera un reporte periódico consolidado de tarjetas (crédito y débito) para el rango de fechas especificado.
@@ -45,15 +48,12 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
 
     log.info("Generating cards periodic report from {} to {}", startDate, endDate);
 
-    return cardConsolidationService.generateCardsPeriodicReport(startDate, endDate)
-      .map(response -> {
-        log.info("Cards periodic report generated successfully for period {} to {}", startDate, endDate);
-        return ResponseEntity.ok(response);
-      })
-      .onErrorResume(error -> {
-        log.error("Error generating cards periodic report: {}", error.getMessage());
-        return Mono.just(ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build());
-      });
+    return securityUtils.validateAdminOnly(exchange)
+      .then(cardConsolidationService.generateCardsPeriodicReport(startDate, endDate))
+        .map(response -> {
+          log.info("Cards periodic report generated successfully for period {} to {}", startDate, endDate);
+          return ResponseEntity.ok(response);
+        });
   }
 
   /**
@@ -71,8 +71,36 @@ public class CardsApiDelegateImpl implements CardsApiDelegate {
     ServerWebExchange exchange) {
 
     log.info("Getting movements for card: {} with limit: {}", cardId, limit);
+    return securityUtils.validateAdminOnly(exchange)
+      .then(cardConsolidationService.getCardMovements(cardId, limit))
+      .map(response -> {
+        log.info("Cards movements report generated successfully for card {}", cardId);
+        return ResponseEntity.ok(response);
+      });
+  }
 
-    return cardConsolidationService.getCardMovements(cardId, limit)
-      .map(ResponseEntity::ok);
+  /**
+   * Obtiene un resumen consolidado de todas las tarjetas de un cliente.
+   * Incluye información de tarjetas de crédito y débito, balances totales,
+   * límites de crédito y estado de las tarjetas.
+   *
+   * @param customerId ID único del cliente
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene el resumen consolidado de tarjetas del cliente
+   */
+  @Override
+  public Mono<ResponseEntity<CustomerCardsSummaryResponse>> getCustomerCardsSummary(
+    String customerId,
+    ServerWebExchange exchange) {
+
+    log.info("Getting cards summary for customer ID: {}", customerId);
+
+    return securityUtils.validateAdminOnly(exchange)
+      .then(cardConsolidationService.getCustomerCardsSummary(customerId))
+      .map(response -> {
+        log.info("Cards summary retrieved successfully for customer: {} with {} total cards",
+          customerId, response.getTotalActiveCards());
+        return ResponseEntity.ok(response);
+      });
   }
 }

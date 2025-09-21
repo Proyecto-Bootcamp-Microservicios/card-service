@@ -43,7 +43,7 @@ public class SecurityUtils {
   /**
    * Método genérico para validar acceso de lectura
    */
-  public <T> Mono<T> validateReadAccess(Mono<T> resourceMono, Function<T, String> customerIdExtractor, ServerWebExchange exchange) {
+  public <T> Mono<T> validateReadAccessGeneric(Mono<T> resourceMono, Function<T, String> customerIdExtractor, ServerWebExchange exchange) {
     return resourceMono
       .flatMap(resource -> {
         String resourceCustomerId = customerIdExtractor.apply(resource);

@@ -13,7 +13,6 @@ spring:
 server:
   port: ${PORT:8081}
 
-# Configuración de Eureka como fallback
 eureka:
   client:
     service-url:

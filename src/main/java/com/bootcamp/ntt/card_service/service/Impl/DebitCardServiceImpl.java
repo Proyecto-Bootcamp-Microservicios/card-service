@@ -191,7 +191,7 @@ public class DebitCardServiceImpl implements DebitCardService {
             return Mono.just(debitCard);
         })
         .map(card -> processAccountAssociation(card, accountId));*/
-    return Mono.just(false)
+    return Mono.just(true)
       .flatMap(isOwner -> {
         if (!isOwner) {
           return Mono.error(new CardServiceException(
@@ -293,14 +293,6 @@ public class DebitCardServiceImpl implements DebitCardService {
         accountUsage.setAmountDeducted(0.0);
         accountUsage.setRemainingBalance(accountBalance.getAvailableBalance());
         return Mono.just(accountUsage);
-      })
-      .onErrorResume(e -> {
-        log.warn("Error processing account {}: {}", accountId, e.getMessage());
-        AccountUsage accountUsage = new AccountUsage();
-        accountUsage.setAccountId(accountId);
-        accountUsage.setAmountDeducted(0.0);
-        accountUsage.setRemainingBalance(0.0);
-        return Mono.just(accountUsage);
       });
   }
 
@@ -329,7 +321,7 @@ public class DebitCardServiceImpl implements DebitCardService {
       .onErrorResume(error -> {
         log.error("CRITICAL: Transaction service failed after successful purchase: {}", error.getMessage());
 
-        // Revertir los débitos en las cuentas
+        // rollback
         return revertAccountDebits(accountsUsed)
           .then(Mono.error(new RuntimeException(
             "Transaction could not be recorded. Payment has been reverted. Please try again.")));

@@ -103,13 +103,6 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
 
         return ResponseEntity.ok(cards);
       });
-
-    /*Boolean activeFilter = (isActive != null) ? isActive : true;
-    Flux<DebitCardResponse> cards = (customerId != null)
-      ? debitCardService.getDebitCardsByActiveAndCustomer(activeFilter, customerId)
-      : debitCardService.getDebitCardsByActive(activeFilter);
-    cards = cards.doOnComplete(() -> log.info("Tarjetas de débito recuperadas correctamente"));
-    return Mono.just(ResponseEntity.ok(cards));*/
   }
 
   /**
@@ -124,23 +117,12 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     String id,
     ServerWebExchange exchange) {
     log.info("Obteniendo tarjeta de débito por ID: {}", id);
-    return securityUtils.validateReadAccess(
+    return securityUtils.validateReadAccessGeneric(
         debitCardService.getCardById(id),
         DebitCardResponse::getCustomerId,
         exchange)
       .map(ResponseEntity::ok)
       .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
-    /*
-    return debitCardService
-      .getCardById(id)
-      .map(response -> {
-        log.info("Tarjeta encontrada: {}", response.getId());
-        return ResponseEntity.ok(response);
-      })
-      .switchIfEmpty(Mono.fromCallable(() -> {
-        log.warn("Tarjeta de débito no encontrada con ID: {}", id);
-        return ResponseEntity.notFound().build();
-      }));*/
   }
 
   /**
@@ -163,14 +145,6 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
       .flatMap(request -> debitCardService.updateCard(id, request))
       .map(ResponseEntity::ok);
 
-    /*
-    return cardRequest
-      .doOnNext(request -> log.info("Solicitud de actualización para tarjeta de débito ID: {}", id))
-      .flatMap(request -> debitCardService.updateCard(id, request))
-      .map(response -> {
-        log.info("Tarjeta de débito actualizada correctamente: {}", response.getId());
-        return ResponseEntity.ok(response);
-      });*/
   }
 
   /**
@@ -188,13 +162,6 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     return securityUtils.validateAdminOnly(exchange)
       .then(debitCardService.deleteCard(id))
       .thenReturn(ResponseEntity.noContent().build());
-    /*log.info("Eliminando tarjeta de débito con ID: {}", id);
-    return debitCardService
-      .deleteCard(id)
-      .then(Mono.fromCallable(() -> {
-        log.info("Tarjeta de débito eliminada correctamente: {}", id);
-        return ResponseEntity.noContent().build();
-      }));*/
   }
 
   /**
@@ -213,12 +180,6 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     return securityUtils.validateAdminOnly(exchange)
       .then(debitCardService.deactivateCard(id))
       .map(ResponseEntity::ok);
-    /*return debitCardService
-      .deactivateCard(id)
-      .map(response -> {
-        log.info("Tarjeta de débito desactivada correctamente: {}", response.getId());
-        return ResponseEntity.ok(response);
-      });*/
   }
 
   /**
@@ -237,12 +198,6 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     return securityUtils.validateAdminOnly(exchange)
       .then(debitCardService.activateCard(id))
       .map(ResponseEntity::ok);
-    /*return debitCardService
-      .activateCard(id)
-      .map(response -> {
-        log.info("Tarjeta de débito activada correctamente: {}", response.getId());
-        return ResponseEntity.ok(response);
-      });*/
   }
 
   /**
@@ -262,7 +217,7 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     ServerWebExchange exchange) {
 
     log.info("Associating account to debit card ID: {}", id);
-    return securityUtils.validateReadAccess(
+    return securityUtils.validateReadAccessGeneric(
         debitCardService.getCardById(id),
         DebitCardResponse::getCustomerId,
         exchange)
@@ -298,7 +253,7 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
 
     log.info("Processing debit card transaction for card: {}", cardNumber);
 
-    return securityUtils.validateReadAccess(
+    return securityUtils.validateReadAccessGeneric(
         debitCardService.getDebitCardByCardNumber(cardNumber),
         DebitCardResponse::getCustomerId,
         exchange)
@@ -342,7 +297,7 @@ public class DebitCardsApiDelegateImpl implements DebitCardsApiDelegate {
     ServerWebExchange exchange) {
 
     log.info("Getting primary account balance for debit card: {}", cardId);
-    return securityUtils.validateReadAccess(
+    return securityUtils.validateReadAccessGeneric(
         debitCardService.getCardById(cardId),
         DebitCardResponse::getCustomerId,
         exchange)

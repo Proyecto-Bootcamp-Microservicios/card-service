@@ -4,17 +4,7 @@ import com.bootcamp.ntt.card_service.api.CreditCardsApiDelegate;
 import com.bootcamp.ntt.card_service.entity.CreditCard;
 import com.bootcamp.ntt.card_service.exception.AccessDeniedException;
 import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
-import com.bootcamp.ntt.card_service.model.ChargeAuthorizationRequest;
-import com.bootcamp.ntt.card_service.model.ChargeAuthorizationResponse;
-import com.bootcamp.ntt.card_service.model.CreditCardBalanceResponse;
-import com.bootcamp.ntt.card_service.model.CreditCardCreateRequest;
-import com.bootcamp.ntt.card_service.model.CreditCardResponse;
-import com.bootcamp.ntt.card_service.model.CreditCardUpdateRequest;
-import com.bootcamp.ntt.card_service.model.CustomerCardValidationResponse;
-import com.bootcamp.ntt.card_service.model.CustomerDailyAverageResponse;
-import com.bootcamp.ntt.card_service.model.PaymentProcessRequest;
-import com.bootcamp.ntt.card_service.model.PaymentProcessResponse;
-import com.bootcamp.ntt.card_service.security.AuthHeaders;
+import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
 
 import com.bootcamp.ntt.card_service.utils.SecurityUtils;
@@ -114,7 +104,7 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
    */
   @Override
   public Mono<ResponseEntity<CreditCardResponse>> getCreditCardById(String id, ServerWebExchange exchange) {
-    return securityUtils.validateReadAccess(
+    return securityUtils.validateReadAccessGeneric(
         creditCardService.getCardById(id),
         CreditCardResponse::getCustomerId,
         exchange)
@@ -263,12 +253,9 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
     log.info("Getting balance for card: {}", cardNumber);
 
     return creditCardService.getCardBalance(cardNumber)
-      .flatMap(balanceResponse -> {
-        // Necesitarías obtener el customerId de la tarjeta para validar
-        return creditCardService.getCardByCardNumber(cardNumber)
-          .flatMap(card -> securityUtils.validateReadAccess(card.getCustomerId(), exchange)
-            .thenReturn(balanceResponse));
-      })
+      .flatMap(balanceResponse -> creditCardService.getCardByCardNumber(cardNumber)
+        .flatMap(card -> securityUtils.validateReadAccess(card.getCustomerId(), exchange)
+          .thenReturn(balanceResponse)))
       .map(response -> {
         log.info("Balance retrieved for card {}: available {}, current {}",
           cardNumber, response.getAvailableCredit(), response.getCurrentBalance());
@@ -295,13 +282,17 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
 
     log.info("Checking active cards for customer: {}", customerId);
 
-    return creditCardService
-      .getCustomerCardValidation(customerId)
+    return securityUtils.validateReadAccessGeneric(
+        creditCardService.getCustomerCardValidation(customerId),
+        CustomerCardValidationResponse::getCustomerId,
+        exchange
+      )
       .map(response -> {
         log.info("Customer validation completed for {}: hasActiveCard={}, count={}",
           customerId, response.getHasActiveCard(), response.getActiveCardCount());
         return ResponseEntity.ok(response);
-      });
+      })
+      .switchIfEmpty(Mono.just(ResponseEntity.notFound().build()));
   }
 
   /**
@@ -336,6 +327,27 @@ public class CreditCardsApiDelegateImpl implements CreditCardsApiDelegate {
             return ResponseEntity.notFound().build();
           }))
       );
+  }
+  /**
+   * Verifica la elegibilidad de un cliente para obtener nuevos productos de crédito
+   * Evalúa si no tiene ningún producto de crédito vencido.
+   * @param customerId ID único del cliente a evaluar
+   * @param exchange   Contexto del servidor web
+   * @return Mono con ResponseEntity que contiene la información de elegibilidad del cliente
+   */
+  @Override
+  public Mono<ResponseEntity<ProductEligibilityResponse>> checkCustomerProductEligibility(
+    String customerId,
+    ServerWebExchange exchange) {
 
+    log.info("Checking product eligibility for customer ID: {}", customerId);
+
+    return securityUtils.validateReadAccess(customerId, exchange)
+      .then(creditCardService.checkCustomerProductEligibility(customerId))
+      .map(response -> {
+        log.info("Eligibility checked for customer: {} - Eligible: {}",
+          customerId, response.getIsEligible());
+        return ResponseEntity.ok(response);
+      });
   }
 }

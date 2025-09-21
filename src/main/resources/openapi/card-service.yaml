@@ -733,7 +733,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /customers/{customerId}/product-eligibility:
+  /credit-cards/customers/{customerId}/product-eligibility:
     get:
       summary: Check customer eligibility for new products
       description: Validates if customer can acquire new products (no overdue credit debts)
@@ -758,7 +758,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /customers/{customerId}/cards-summary:
+  /cards/customers/{customerId}/cards-summary:
     get:
       summary: Get customer cards summary
       description: Returns all cards (credit and debit) for a specific customer

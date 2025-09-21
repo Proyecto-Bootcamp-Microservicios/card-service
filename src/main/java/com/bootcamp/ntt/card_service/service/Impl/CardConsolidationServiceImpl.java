@@ -4,6 +4,8 @@ import com.bootcamp.ntt.card_service.client.TransactionServiceClient;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionResponse;
 import com.bootcamp.ntt.card_service.exception.CardServiceException;
+import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
+import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
 import com.bootcamp.ntt.card_service.service.CardConsolidationService;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
@@ -28,6 +30,8 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
 
   private final DebitCardService debitCardService;
   private final CreditCardService creditCardService;
+  private final CreditCardMapper creditCardMapper;
+  private final DebitCardMapper debitCardMapper;
   private final TransactionServiceClient transactionServiceClient;
   private final ExternalServiceWrapper externalServiceWrapper;
 
@@ -41,8 +45,7 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
       )
       .map(tuple -> buildSummaryResponse(customerId, tuple.getT1(), tuple.getT2()))
       .doOnSuccess(response -> log.debug("Summary built for customer: {} with {} total cards",
-        customerId, response.getTotalActiveCards()))
-      .doOnError(error -> log.error("Error building summary for customer {}: {}", customerId, error.getMessage()));
+        customerId, response.getTotalActiveCards()));
   }
 
   private CustomerCardsSummaryResponse buildSummaryResponse(String customerId,
@@ -50,39 +53,11 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
                                                             List<CreditCardResponse> creditCards) {
     CustomerCardsSummaryResponse response = new CustomerCardsSummaryResponse();
     response.setCustomerId(customerId);
-    response.setCreditCards(mapCreditCardsSummary(creditCards));
-    response.setDebitCards(mapDebitCardsSummary(debitCards));
+    response.setCreditCards(creditCardMapper.toCreditCardSummaryList(creditCards));
+    response.setDebitCards(debitCardMapper.toDebitCardSummaryList(debitCards));
     response.setTotalActiveCards(creditCards.size() + debitCards.size());
     response.setRetrievedAt(OffsetDateTime.now());
     return response;
-  }
-
-  // Mapeos simplificados para MVP
-  private List<CreditCardSummary> mapCreditCardsSummary(List<CreditCardResponse> creditCards) {
-    return creditCards.stream()
-      .map(card -> {
-        CreditCardSummary summary = new CreditCardSummary();
-        summary.setCardId(card.getId());
-        summary.setCardNumber(card.getCardNumber()); // Enmascarar por seguridad
-        summary.setAvailableCredit(card.getAvailableCredit() != null ? BigDecimal.valueOf(card.getAvailableCredit()) : BigDecimal.ZERO);
-        summary.setCurrentBalance(card.getCurrentBalance() != null ? BigDecimal.valueOf(card.getCurrentBalance()) : BigDecimal.ZERO);
-        summary.setIsActive(card.getIsActive());
-        return summary;
-      })
-      .collect(Collectors.toList());
-  }
-
-  private List<DebitCardSummary> mapDebitCardsSummary(List<DebitCardResponse> debitCards) {
-    return debitCards.stream()
-      .map(card -> {
-        DebitCardSummary summary = new DebitCardSummary();
-        summary.setCardId(card.getId());
-        summary.setCardNumber(card.getCardNumber());
-        summary.setPrimaryAccountId(card.getPrimaryAccountId());
-        summary.setIsActive(card.getIsActive());
-        return summary;
-      })
-      .collect(Collectors.toList());
   }
 
   @Override
@@ -163,7 +138,7 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
     Integer actualLimit = (limit != null && limit <= 50) ? limit : 10;
     log.debug("Getting last {} movements for card: {}", actualLimit, cardId);
 
-    return determineCardTypeReactive(cardId)
+    return determineCardType(cardId)
       .flatMap(cardType ->
         externalServiceWrapper.getLastCardMovementsWithCircuitBreaker(cardId, actualLimit)
           .collectList()
@@ -173,12 +148,10 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
         cardId, response.getTotalCount()));
   }
 
-  private Mono<String> determineCardTypeReactive(String cardId) {
-    // Primero verificar si es tarjeta de débito de manera reactiva
+  private Mono<String> determineCardType(String cardId) {
     return debitCardService.getCardById(cardId)
       .map(debitCard -> "DEBIT")
       .switchIfEmpty(
-        // Si no es débito, verificar si es crédito
         creditCardService.getCardById(cardId)
           .map(creditCard -> "CREDIT")
           .switchIfEmpty(Mono.error(new CardServiceException(
@@ -213,7 +186,6 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
     movement.setTransactionId(transaction.getTransactionId());
     movement.setAmount(transaction.getAmount());
 
-    // Mapeo seguro de enums
     try {
       movement.setTransactionType(
         CardMovement.TransactionTypeEnum.valueOf(transaction.getTransactionType())
