@@ -11,7 +11,7 @@ spring:
         max-interval: 2000
         multiplier: 1.1
 server:
-  port: ${PORT:8081}
+  port: ${PORT:8084}
 
 eureka:
   client:

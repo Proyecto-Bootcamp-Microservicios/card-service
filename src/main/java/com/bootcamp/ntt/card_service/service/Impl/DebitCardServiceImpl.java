@@ -21,16 +21,20 @@ import com.bootcamp.ntt.card_service.service.DebitCardService;
 import com.bootcamp.ntt.card_service.utils.CardUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
+
+import static com.bootcamp.ntt.card_service.utils.CacheKeys.MASTER_DATA_TTL;
 
 @Service
 @RequiredArgsConstructor
@@ -43,6 +47,7 @@ public class DebitCardServiceImpl implements DebitCardService {
   private final DebitCardMapper debitCardMapper;
   private final CardUtils cardUtils;
   private final ExternalServiceWrapper externalServiceWrapper;
+  private final ReactiveRedisTemplate<String, Object> redisTemplate;
 
   @Override
   public Flux<DebitCardResponse> getDebitCardsByActive(Boolean isActive) {
@@ -60,30 +65,48 @@ public class DebitCardServiceImpl implements DebitCardService {
 
   @Override
   public Mono<DebitCardResponse> getCardById(String id) {
-    log.debug("Getting credit card by ID: {}", id);
-    return debitCardRepository.findById(id)
-      .map(debitCardMapper::toResponse)
-      .doOnSuccess(credit -> {
-        if (credit != null) {
-          log.debug("Card found with ID: {}", id);
-        } else {
-          log.debug("Card not found with ID: {}", id);
-        }
-      });
+    String cacheKey = "debit:master:id:" + id;
+    log.debug("Getting debit card by ID: {}", id);
+
+    return getCachedValue(cacheKey, DebitCardResponse.class)
+      .switchIfEmpty(
+        debitCardRepository.findById(id)
+          .map(debitCardMapper::toResponse)
+          .flatMap(response ->
+            setCachedValue(cacheKey, response, MASTER_DATA_TTL)
+              .thenReturn(response)
+          )
+          .doOnSuccess(card -> {
+            if (card != null) {
+              log.debug("Debit card found and cached: {}", id);
+            } else {
+              log.debug("Debit card not found: {}", id);
+            }
+          })
+      );
   }
 
   @Override
   public Mono<DebitCardResponse> getDebitCardByCardNumber(String cardNumber) {
+    String cacheKey = "debit:master:number:" + cardNumber;
     log.debug("Getting debit card by cardNumber: {}", cardNumber);
-    return debitCardRepository.findByCardNumber(cardNumber)
-      .map(debitCardMapper::toResponse)
-      .doOnSuccess(credit -> {
-        if (credit != null) {
-          log.debug("Card found with cardNumber: {}", cardNumber);
-        } else {
-          log.debug("Card not found with cardNumber: {}", cardNumber);
-        }
-      });
+
+    return getCachedValue(cacheKey, DebitCardResponse.class)
+      .switchIfEmpty(
+        debitCardRepository.findByCardNumber(cardNumber)
+          .map(debitCardMapper::toResponse)
+          .flatMap(response ->
+            setCachedValue(cacheKey, response, MASTER_DATA_TTL)
+              .thenReturn(response)
+          )
+          .doOnSuccess(card -> {
+            if (card != null) {
+              log.debug("Debit card found and cached: {}", cardNumber);
+            } else {
+              log.debug("Debit card not found: {}", cardNumber);
+            }
+          })
+      );
   }
 
   @Override
@@ -99,22 +122,32 @@ public class DebitCardServiceImpl implements DebitCardService {
 
   @Override
   public Mono<DebitCardResponse> updateCard(String id, DebitCardUpdateRequest cardRequest) {
-    log.debug("Updating card with ID: {}", id);
+    log.debug("Updating debit card with ID: {}", id);
 
     return debitCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Debit card not found")))
       .map(existing -> debitCardMapper.updateEntity(existing, cardRequest))
       .flatMap(debitCardRepository::save)
-      .map(debitCardMapper::toResponse)
-      .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()));
+      .map(card -> {
+        invalidateDebitCardCaches(card.getId(), card.getCardNumber());
+        return debitCardMapper.toResponse(card);
+      })
+      .doOnSuccess(response -> log.debug("Debit card updated with ID: {}", response.getId()));
   }
 
   @Override
   public Mono<Void> deleteCard(String id) {
     return debitCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Debit card not found")))
-      .flatMap(debitCardRepository::delete)
-      .doOnSuccess(unused -> log.debug("Card deleted"));
+      .flatMap(card -> {
+        String cardNumber = card.getCardNumber();
+
+        return debitCardRepository.delete(card)
+          .doOnSuccess(unused -> {
+            log.debug("Debit card deleted");
+            invalidateDebitCardCaches(id, cardNumber);
+          });
+      });
   }
 
   @Override
@@ -139,6 +172,45 @@ public class DebitCardServiceImpl implements DebitCardService {
       })
       .map(debitCardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} activated", id));
+  }
+
+  //helpers
+  private <T> Mono<T> getCachedValue(String key, Class<T> valueType) {
+    return redisTemplate.opsForValue()
+      .get(key)
+      .cast(valueType)
+      .doOnNext(cached -> log.debug("REDIS CACHE HIT: {}", key))
+      .onErrorResume(error -> {
+        log.warn("Redis read error for key {}: {}", key, error.getMessage());
+        return Mono.empty();
+      });
+  }
+
+  private Mono<Boolean> setCachedValue(String key, Object value, Duration ttl) {
+    return redisTemplate.opsForValue()
+      .set(key, value, ttl)
+      .doOnSuccess(success -> {
+        if (success) {
+          log.debug("REDIS CACHE SET: {} (TTL: {})", key, ttl);
+        } else {
+          log.warn("Redis cache SET failed for key: {}", key);
+        }
+      })
+      .onErrorResume(error -> {
+        log.error("Redis write error for key {}: {}", key, error.getMessage());
+        return Mono.just(false);
+      });
+  }
+
+  //invalidacion
+  private void invalidateDebitCardCaches(String cardId, String cardNumber) {
+    Flux.just(
+        "debit:master:id:" + cardId,
+        "debit:master:number:" + cardNumber
+      )
+      .flatMap(redisTemplate::delete)
+      .doOnNext(deleted -> log.debug("Debit card cache invalidated: {}", deleted))
+      .subscribe();
   }
 
   @Override

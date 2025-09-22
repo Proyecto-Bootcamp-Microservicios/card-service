@@ -27,7 +27,6 @@ public class CustomerServiceClient {
 
   public Mono<CustomerResponse> getCustomer(String customerId) {
     log.debug("Fetching customer details for ID: {}", customerId);
-
     return webClient
       .get()
       .uri(customerServiceUrl + "/customers/{id}", customerId)
@@ -47,7 +46,7 @@ public class CustomerServiceClient {
 
   public Mono<CustomerTypeResponse> getCustomerType(String customerId) {
     log.debug("Fetching customer type for ID: {}", customerId);
-
+    log.debug("helpppppppp: {}", customerServiceUrl);
     return webClient
       .get()
       .uri(customerServiceUrl + "/customers/{id}", customerId)

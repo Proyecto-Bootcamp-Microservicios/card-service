@@ -4,6 +4,7 @@ import com.bootcamp.ntt.card_service.client.TransactionServiceClient;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionResponse;
 import com.bootcamp.ntt.card_service.exception.CardServiceException;
+import com.bootcamp.ntt.card_service.mapper.CardMapper;
 import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
 import com.bootcamp.ntt.card_service.model.*;
@@ -32,6 +33,7 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
   private final CreditCardService creditCardService;
   private final CreditCardMapper creditCardMapper;
   private final DebitCardMapper debitCardMapper;
+  private final CardMapper cardMapper;
   private final TransactionServiceClient transactionServiceClient;
   private final ExternalServiceWrapper externalServiceWrapper;
 
@@ -169,55 +171,10 @@ public class CardConsolidationServiceImpl implements CardConsolidationService {
     CardMovementsResponse response = new CardMovementsResponse();
     response.setCardId(cardId);
     response.setCardType(CardMovementsResponse.CardTypeEnum.valueOf(cardType));
-    response.setMovements(mapToCardMovements(transactions));
+    response.setMovements(cardMapper.toCardMovementList(transactions));
     response.setTotalCount(transactions.size());
     response.setRetrievedAt(OffsetDateTime.now());
     return response;
   }
 
-  private List<CardMovement> mapToCardMovements(List<TransactionResponse> transactions) {
-    return transactions.stream()
-      .map(this::mapTransactionToCardMovement)
-      .collect(Collectors.toList());
-  }
-
-  private CardMovement mapTransactionToCardMovement(TransactionResponse transaction) {
-    CardMovement movement = new CardMovement();
-    movement.setTransactionId(transaction.getTransactionId());
-    movement.setAmount(transaction.getAmount());
-
-    try {
-      movement.setTransactionType(
-        CardMovement.TransactionTypeEnum.valueOf(transaction.getTransactionType())
-      );
-      movement.setStatus(
-        CardMovement.StatusEnum.valueOf(transaction.getStatus())
-      );
-    } catch (IllegalArgumentException e) {
-      log.warn("Unknown enum value in transaction {}: {}", transaction.getTransactionId(), e.getMessage());
-    }
-
-    movement.setMerchantInfo(transaction.getMerchantInfo());
-    movement.setProcessedAt(transaction.getProcessedAt());
-
-    // Mapear accountsAffected si existe
-    if (transaction.getAccountsAffected() != null) {
-      movement.setAccountsAffected(mapAccountsAffected(transaction.getAccountsAffected()));
-    }
-
-    return movement;
-  }
-
-  private List<CardMovementAccountsAffectedInner> mapAccountsAffected(
-    List<TransactionAccount> accountsAffected) {
-
-    return accountsAffected.stream()
-      .map(account -> {
-        CardMovementAccountsAffectedInner affected = new CardMovementAccountsAffectedInner();
-        affected.setAccountId(account.getAccountId());
-        affected.setAmountDeducted(account.getAmountDeducted());
-        return affected;
-      })
-      .collect(Collectors.toList());
-  }
 }

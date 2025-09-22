@@ -18,15 +18,20 @@ import com.bootcamp.ntt.card_service.service.ExternalServiceWrapper;
 import com.bootcamp.ntt.card_service.utils.CardUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.Objects;
+
+import static com.bootcamp.ntt.card_service.utils.CacheKeys.BALANCE_TTL;
+import static com.bootcamp.ntt.card_service.utils.CacheKeys.MASTER_DATA_TTL;
 
 
 @Slf4j
@@ -41,6 +46,7 @@ public class CreditCardServiceImpl implements CreditCardService {
   private final TransactionServiceClient transactionServiceClient;
   private final ExternalServiceWrapper externalServiceWrapper;
   private final CardUtils cardUtils;
+  private final ReactiveRedisTemplate<String, Object> redisTemplate;
 
 
   @Override
@@ -59,30 +65,48 @@ public class CreditCardServiceImpl implements CreditCardService {
 
   @Override
   public Mono<CreditCardResponse> getCardById(String id) {
+    String cacheKey = "card:master:id:" + id;
     log.debug("Getting credit card by ID: {}", id);
-    return creditCardRepository.findById(id)
-      .map(creditCardMapper::toResponse)
-      .doOnSuccess(credit -> {
-        if (credit != null) {
-          log.debug("Card found with ID: {}", id);
-        } else {
-          log.debug("Card not found with ID: {}", id);
-        }
-      });
+
+    return getCachedValue(cacheKey, CreditCardResponse.class)
+      .switchIfEmpty(
+        creditCardRepository.findById(id)
+          .map(creditCardMapper::toResponse)
+          .flatMap(response ->
+            setCachedValue(cacheKey, response, MASTER_DATA_TTL)
+              .thenReturn(response)
+          )
+          .doOnSuccess(card -> {
+            if (card != null) {
+              log.debug("Card found and cached: {}", id);
+            } else {
+              log.debug("Card not found: {}", id);
+            }
+          })
+      );
   }
 
   @Override
   public Mono<CreditCardResponse> getCardByCardNumber(String cardNumber) {
+    String cacheKey = "card:master:number:" + cardNumber;
     log.debug("Getting credit card by cardNumber: {}", cardNumber);
-    return creditCardRepository.findByCardNumber(cardNumber)
-      .map(creditCardMapper::toResponse)
-      .doOnSuccess(credit -> {
-        if (credit != null) {
-          log.debug("Card found with cardNumber: {}", cardNumber);
-        } else {
-          log.debug("Card not found with cardNumber: {}", cardNumber);
-        }
-      });
+
+    return getCachedValue(cacheKey, CreditCardResponse.class)
+      .switchIfEmpty(
+        creditCardRepository.findByCardNumber(cardNumber)
+          .map(creditCardMapper::toResponse)
+          .flatMap(response ->
+            setCachedValue(cacheKey, response, MASTER_DATA_TTL)
+              .thenReturn(response)
+          )
+          .doOnSuccess(card -> {
+            if (card != null) {
+              log.debug("Card found and cached: {}", cardNumber);
+            } else {
+              log.debug("Card not found: {}", cardNumber);
+            }
+          })
+      );
   }
 
   @Override
@@ -95,7 +119,11 @@ public class CreditCardServiceImpl implements CreditCardService {
         .map(cardNumber -> creditCardMapper.toEntity(cardRequest, customerType.getCustomerType(), cardNumber))
         .flatMap(creditCardRepository::save)
         .map(creditCardMapper::toResponse))
-      .doOnSuccess(response -> log.debug("Card created with ID: {}", response.getId()));
+      .doOnSuccess(response -> {
+        log.debug("Card created with ID: {}", response.getId());
+        // ✅ INVALIDAR CACHE DEL CLIENTE
+        invalidateCustomerCaches(response.getCustomerId());
+      });
   }
 
   @Override
@@ -106,7 +134,10 @@ public class CreditCardServiceImpl implements CreditCardService {
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
       .map(existing -> creditCardMapper.updateEntity(existing, cardRequest))
       .flatMap(creditCardRepository::save)
-      .map(creditCardMapper::toResponse)
+      .map(card -> {
+        invalidateCardCaches(card.getId(), card.getCardNumber(), card.getCustomerId());
+        return creditCardMapper.toResponse(card);
+      })
       .doOnSuccess(response -> log.debug("Card updated with ID: {}", response.getId()));
   }
 
@@ -114,8 +145,16 @@ public class CreditCardServiceImpl implements CreditCardService {
   public Mono<Void> deleteCard(String id) {
     return creditCardRepository.findById(id)
       .switchIfEmpty(Mono.error(new RuntimeException("Credit card not found")))
-      .flatMap(creditCardRepository::delete)
-      .doOnSuccess(unused -> log.debug("Card deleted"));
+      .flatMap(card -> {
+        String customerId = card.getCustomerId();
+        String cardNumber = card.getCardNumber();
+
+        return creditCardRepository.delete(card)
+          .doOnSuccess(unused -> {
+            log.debug("Card deleted");
+            invalidateCardCaches(id, cardNumber, customerId);
+          });
+      });
   }
 
   @Override
@@ -140,6 +179,56 @@ public class CreditCardServiceImpl implements CreditCardService {
       })
       .map(creditCardMapper::toResponse)
       .doOnSuccess(c -> log.debug("Card {} activated", id));
+  }
+
+  //helpers
+  private <T> Mono<T> getCachedValue(String key, Class<T> valueType) {
+    return redisTemplate.opsForValue()
+      .get(key)
+      .cast(valueType)
+      .doOnNext(cached -> log.debug("REDIS CACHE HIT: {}", key))
+      .onErrorResume(error -> {
+        log.warn("Redis read error for key {}: {}", key, error.getMessage());
+        return Mono.empty();
+      });
+  }
+
+  private Mono<Boolean> setCachedValue(String key, Object value, Duration ttl) {
+    return redisTemplate.opsForValue()
+      .set(key, value, ttl)
+      .doOnSuccess(success -> {
+        if (success) {
+          log.debug("REDIS CACHE SET: {} (TTL: {})", key, ttl);
+        } else {
+          log.warn("Redis cache SET failed for key: {}", key);
+        }
+      })
+      .onErrorResume(error -> {
+        log.error("❌ Redis write error for key {}: {}", key, error.getMessage());
+        return Mono.just(false);
+      });
+  }
+
+  //invalidaciones
+  private void invalidateCardCaches(String cardId, String cardNumber, String customerId) {
+    Flux.just(
+        "card:master:id:" + cardId,
+        "card:master:number:" + cardNumber,
+        "card:balance:" + cardNumber,
+        "card:eligibility:" + customerId
+      )
+      .flatMap(redisTemplate::delete)
+      .doOnNext(deleted -> log.debug("✅ Card cache invalidated: {}", deleted))
+      .subscribe();
+  }
+
+  private void invalidateCustomerCaches(String customerId) {
+    Flux.just(
+        "card:eligibility:" + customerId
+      )
+      .flatMap(redisTemplate::delete)
+      .doOnNext(deleted -> log.debug("✅ Customer cache invalidated: {}", deleted))
+      .subscribe();
   }
 
   @Override
@@ -232,12 +321,10 @@ public class CreditCardServiceImpl implements CreditCardService {
 
   @Override
   public Mono<CreditCardBalanceResponse> getCardBalance(String cardNumber) {
-    log.debug("Getting balance for card: {}", cardNumber);
-
     return creditCardRepository.findByCardNumber(cardNumber)
-      .switchIfEmpty(Mono.error(new RuntimeException("Card not found with id: " + cardNumber)))
+      .switchIfEmpty(Mono.error(new RuntimeException("Card not found: " + cardNumber)))
       .map(creditCardMapper::toBalanceResponse)
-      .doOnSuccess(response -> log.debug("Balance retrieved for card: {}", cardNumber));
+      .doOnSuccess(response -> log.debug("Balance retrieved fresh from DB: {}", cardNumber));
   }
 
   @Override
@@ -390,7 +477,6 @@ public class CreditCardServiceImpl implements CreditCardService {
 
   //Validaciones
   private Mono<Void> validateCreditCreation(String customerId, String customerType) {
-    // Validar reglas de negocio según el tipo
     if ("PERSONAL".equals(customerType)) {
       return validatePersonalCreditCardRules(customerId);
     } else {
