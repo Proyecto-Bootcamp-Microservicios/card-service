@@ -7,6 +7,7 @@ import com.bootcamp.ntt.card_service.exception.TransactionServiceException;
 import com.bootcamp.ntt.card_service.model.TransactionCreateRequest;
 import com.bootcamp.ntt.card_service.model.TransactionsSummary;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
@@ -29,7 +30,7 @@ public class TransactionServiceClient {
 
   private final WebClient webClient;
 
-  @Value("${services.transaction.base-url:http://localhost:8082}")
+  @Value("${services.transaction.base-url:transaction-service}")
   private String transactionServiceUrl;
 
   /**
@@ -43,7 +44,7 @@ public class TransactionServiceClient {
 
     return webClient
       .post()
-      .uri(transactionServiceUrl + "/transactions")
+      .uri(transactionServiceUrl + "/transactions/charge")
       .bodyValue(request)
       .retrieve()
       .onStatus(HttpStatus::is4xxClientError, response -> {
@@ -148,5 +149,33 @@ public class TransactionServiceClient {
         log.error("Error calling transaction service: {}", ex.getMessage());
         return new CustomerServiceException("Error retrieving card movements: " + ex.getMessage());
       });
+  }
+
+  public Mono<Void> createDebitCardPurchaseTransaction(TransactionRequest request) {
+    log.debug("Creating debit card purchase transaction for card: {}", request.getCardNumber());
+
+    return webClient
+      .post()
+      .uri(transactionServiceUrl + "/transactions/debit-purchase")
+      .bodyValue(request)
+      .retrieve()
+      .onStatus(HttpStatus::is4xxClientError, response -> {
+        log.warn("Invalid debit purchase request for card: {}", request.getCardNumber());
+        return response.bodyToMono(String.class)
+          .flatMap(errorBody -> Mono.error(new TransactionServiceException(
+            "Invalid debit purchase request: " + errorBody)));
+      })
+      .onStatus(HttpStatus::is5xxServerError, response -> {
+        log.error("Transaction service error for debit card: {}", request.getCardNumber());
+        return response.bodyToMono(String.class)
+          .flatMap(errorBody -> Mono.error(new TransactionServiceException(
+            "Transaction service unavailable: " + errorBody)));
+      })
+      .bodyToMono(Void.class)
+      .timeout(Duration.ofSeconds(10)) // Un poco más de timeout por el procesamiento múltiple
+      .doOnSuccess(ignored -> log.debug("Debit purchase transaction created successfully for card: {}",
+        request.getCardNumber()))
+      .doOnError(error -> log.error("Error creating debit purchase transaction for card {}: {}",
+        request.getCardNumber(), error.getMessage()));
   }
 }

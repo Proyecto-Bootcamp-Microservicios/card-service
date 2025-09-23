@@ -111,7 +111,7 @@ class CreditCardServiceImplTest {
     when(creditCardRepository.findById(cardId)).thenReturn(Mono.empty());
 
     // When
-    Mono<CreditCardResponse> result = creditCardService.getCardById(cardId);
+    Mono<com.bootcamp.ntt.card_service.model.CreditCardResponse> result = creditCardService.getCardById(cardId);
 
     // Then
     StepVerifier.create(result)
@@ -139,7 +139,7 @@ class CreditCardServiceImplTest {
     when(creditCardMapper.toResponse(mockCreditCard)).thenReturn(mockCreditCardResponse);
 
     // When
-    Mono<CreditCardResponse> result = creditCardService.createCard(mockCreateRequest);
+    Mono<com.bootcamp.ntt.card_service.model.CreditCardResponse> result = creditCardService.createCard(mockCreateRequest);
 
     // Then
     StepVerifier.create(result)

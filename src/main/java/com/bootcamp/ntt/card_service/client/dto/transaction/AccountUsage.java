@@ -1,4 +1,4 @@
-package com.bootcamp.ntt.card_service.client.dto.account;
+package com.bootcamp.ntt.card_service.client.dto.transaction;
 
 import lombok.Getter;
 import lombok.Setter;

@@ -5,7 +5,7 @@ import com.bootcamp.ntt.card_service.client.TransactionServiceClient;
 import com.bootcamp.ntt.card_service.client.dto.account.AccountCreditRequest;
 import com.bootcamp.ntt.card_service.client.dto.account.AccountDebitRequest;
 import com.bootcamp.ntt.card_service.client.dto.account.AccountTransactionResponse;
-import com.bootcamp.ntt.card_service.client.dto.account.AccountUsage;
+import com.bootcamp.ntt.card_service.client.dto.transaction.AccountUsage;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.DebitCard;
 import com.bootcamp.ntt.card_service.enums.CardType;
@@ -15,7 +15,13 @@ import com.bootcamp.ntt.card_service.exception.EntityNotFoundException;
 import com.bootcamp.ntt.card_service.service.ExternalServiceWrapper;
 import com.bootcamp.ntt.card_service.utils.ErrorCodes;
 import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.DebitCardResponse;
+import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
+import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
+import com.bootcamp.ntt.card_service.model.AssociateAccountRequest;
 import com.bootcamp.ntt.card_service.repository.DebitCardRepository;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
 import com.bootcamp.ntt.card_service.utils.CardUtils;
@@ -303,7 +309,7 @@ public class DebitCardServiceImpl implements DebitCardService {
       .flatMap(debitCard -> validateDebitCard(debitCard)
         .then(validateAmount(request.getAmount()))
         .then(processCascadePayment(debitCard, request.getAmount()))
-        .flatMap(accountsUsed -> createTransactionInTransactionService(debitCard, request, accountsUsed)
+        .flatMap(accountsUsed -> createDebitPurchaseTransactionInTransactionService(debitCard, request, accountsUsed)
           .map(transaction -> debitCardMapper.toDebitPurchaseResponse(debitCard, request, accountsUsed, transaction)))
       )
       .doOnSuccess(response -> log.debug("Purchase processed successfully for card: {}", cardNumber));
@@ -382,38 +388,51 @@ public class DebitCardServiceImpl implements DebitCardService {
     return Mono.just(orderedAccounts);
   }
 
-  private Mono<String> createTransactionInTransactionService(DebitCard debitCard,
-                                                             DebitPurchaseRequest request,
-                                                             List<AccountUsage> accountsUsed) {
+  private Mono<String> createDebitPurchaseTransactionInTransactionService(DebitCard debitCard,
+                                                                          DebitPurchaseRequest request,
+                                                                          List<AccountUsage> accountsUsed) {
     TransactionRequest transactionRequest = debitCardMapper.toTransactionRequest(
       debitCard, request, accountsUsed, cardUtils.generateAuthCode());
 
-    return externalServiceWrapper.createTransactionWithCircuitBreaker(transactionRequest)
+    return externalServiceWrapper.createDebitCardPurchaseTransactionWithCircuitBreaker(transactionRequest)
       .then(Mono.just(generateTransactionId()))
       .onErrorResume(error -> {
-        log.error("CRITICAL: Transaction service failed after successful purchase: {}", error.getMessage());
+        log.error("CRITICAL: Debit purchase transaction service failed after successful purchase: {}", error.getMessage());
 
-        // rollback
+        // Rollback de los débitos en las cuentas
         return revertAccountDebits(accountsUsed)
           .then(Mono.error(new RuntimeException(
-            "Transaction could not be recorded. Payment has been reverted. Please try again.")));
+            "Debit purchase transaction could not be recorded. Payment has been reverted. Please try again.")));
       });
   }
 
   private Mono<Void> revertAccountDebits(List<AccountUsage> accountsUsed) {
-    // Crear operaciones de reversión para cada cuenta usada
-    List<Mono<AccountTransactionResponse>> revertOperations = accountsUsed.stream()
-      .map(account -> {
-        AccountCreditRequest creditRequest = new AccountCreditRequest(
-          BigDecimal.valueOf(account.getAmountDeducted()),
-          "REVERT - Transaction recording failed"
-        );
-        return externalServiceWrapper.creditAccountWithCircuitBreaker(account.getAccountId(), creditRequest);
-      })
-      .collect(Collectors.toList());
+    log.warn("Initiating debit reversion for {} accounts", accountsUsed.size());
 
-    // Ejecutar todas las reversiones y retornar
-    return Flux.merge(revertOperations).then();
+    return Flux.fromIterable(accountsUsed)
+      .filter(accountUsage -> accountUsage.getAmountDeducted() > 0)
+      .flatMap(this::revertSingleAccountDebit)
+      .then()
+      .doOnSuccess(ignored -> log.info("Debit reversion process completed successfully"))
+      .doOnError(error -> log.error("Debit reversion process failed: {}", error.getMessage()));
+  }
+
+  private Mono<AccountTransactionResponse> revertSingleAccountDebit(AccountUsage accountUsage) {
+    String transactionId = UUID.randomUUID().toString();
+
+    AccountCreditRequest creditRequest = new AccountCreditRequest(
+      BigDecimal.valueOf(accountUsage.getAmountDeducted()),
+      "REVERT_DEBIT_CARD_PURCHASE"
+    );
+
+    return externalServiceWrapper.creditAccountWithCircuitBreaker(accountUsage.getAccountId(), creditRequest)
+      .doOnSuccess(response -> log.info("Reverted {} for account {} (txn: {})",
+        accountUsage.getAmountDeducted(), accountUsage.getAccountId(), transactionId))
+      .onErrorResume(error -> {
+        log.error("FAILED to revert {} for account {} (txn: {}): {}",
+          accountUsage.getAmountDeducted(), accountUsage.getAccountId(), transactionId, error.getMessage());
+        return Mono.empty(); // Continuar con otras reversiones
+      });
   }
 
 
@@ -433,12 +452,9 @@ public class DebitCardServiceImpl implements DebitCardService {
       .flatMap(debitCard -> {
         String primaryAccountId = debitCard.getPrimaryAccountId();
 
-        return Mono.zip(
-            externalServiceWrapper.getAccountBalanceWithCircuitBreaker(primaryAccountId),
-            externalServiceWrapper.getAccountDetailsWithCircuitBreaker(primaryAccountId)
-          )
-          .map(tuple -> debitCardMapper.toPrimaryAccountBalanceResponse(
-            cardId, debitCard, tuple.getT1(), tuple.getT2()));
+        return externalServiceWrapper.getAccountBalanceWithCircuitBreaker(primaryAccountId)
+          .map(accountBalance -> debitCardMapper.toPrimaryAccountBalanceResponse(
+            cardId, debitCard, accountBalance));
       })
       .doOnSuccess(response -> log.debug("Primary account balance retrieved for card: {}", cardId));
   }

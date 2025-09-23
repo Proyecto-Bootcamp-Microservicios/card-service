@@ -2,19 +2,24 @@ package com.bootcamp.ntt.card_service.mapper;
 
 import com.bootcamp.ntt.card_service.client.dto.account.AccountBalanceResponse;
 import com.bootcamp.ntt.card_service.client.dto.account.AccountDetailsResponse;
-import com.bootcamp.ntt.card_service.client.dto.account.AccountUsage;
+import com.bootcamp.ntt.card_service.client.dto.transaction.AccountUsage;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionAccount;
 import com.bootcamp.ntt.card_service.client.dto.transaction.TransactionRequest;
 import com.bootcamp.ntt.card_service.entity.DebitCard;
 import com.bootcamp.ntt.card_service.enums.CardType;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.DebitCardResponse;
+import com.bootcamp.ntt.card_service.model.DebitCardSummary;
+import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponseAccountsUsedInner;
+import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
 
-import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Component;
@@ -121,27 +126,18 @@ public class DebitCardMapper {
   public PrimaryAccountBalanceResponse toPrimaryAccountBalanceResponse(
     String cardId,
     DebitCard debitCard,
-    AccountBalanceResponse accountBalance,
-    AccountDetailsResponse accountDetails) {
+    AccountBalanceResponse accountBalance) {
 
     PrimaryAccountBalanceResponse response = new PrimaryAccountBalanceResponse();
     response.setCardId(cardId);
     response.setPrimaryAccountId(debitCard.getPrimaryAccountId());
-    response.setAccountNumber(accountDetails.getAccountNumber());
+
+    response.setPrimaryAccountId(accountBalance.getAccountId());
     response.setBalance(accountBalance.getAvailableBalance());
-    response.setCurrency(accountDetails.getCurrency());
+    //response.setCurrency("PEN");
+    //response.setAccountType(PrimaryAccountBalanceResponse.AccountTypeEnum.SAVINGS);
 
-    try {
-      response.setAccountType(
-        PrimaryAccountBalanceResponse.AccountTypeEnum.valueOf(accountDetails.getAccountType())
-      );
-    } catch (IllegalArgumentException e) {
-      response.setAccountType(PrimaryAccountBalanceResponse.AccountTypeEnum.SAVINGS);
-    }
-
-    if (accountDetails.getLastMovementDate() != null) {
-      response.setLastMovementDate(accountDetails.getLastMovementDate());
-    }
+    response.setLastMovementDate(OffsetDateTime.now());
 
     return response;
   }
@@ -166,15 +162,16 @@ public class DebitCardMapper {
   public TransactionRequest toTransactionRequest(DebitCard debitCard, DebitPurchaseRequest request,
                                                  List<AccountUsage> accountsUsed, String authCode) {
     TransactionRequest transactionRequest = new TransactionRequest();
-    transactionRequest.setCardId(debitCard.getId());
+    //transactionRequest.setTransactionId(generateTransactionId());
+    transactionRequest.setCardNumber(debitCard.getCardNumber());
     transactionRequest.setAmount(request.getAmount());
-    transactionRequest.setTransactionType(mapTransactionType(request.getTransactionType()));
+    //transactionRequest.setMerchantInfo(request.getMerchantInfo());
+    transactionRequest.setDescription(request.getDescription());
     transactionRequest.setAuthorizationCode(authCode);
-    transactionRequest.setStatus("APPROVED");
-    transactionRequest.setTimestamp(LocalDateTime.now());
+    transactionRequest.setAccountsAffected(accountsUsed);
 
     if (accountsUsed != null && !accountsUsed.isEmpty()) {
-      transactionRequest.setAccountsAffected(toTransactionAccounts(accountsUsed));
+      transactionRequest.setAccountsAffected(accountsUsed);
     }
 
     /*String description = String.format("%s - %s account(s) used",

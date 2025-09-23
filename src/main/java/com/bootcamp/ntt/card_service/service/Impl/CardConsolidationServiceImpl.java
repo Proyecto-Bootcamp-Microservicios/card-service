@@ -7,7 +7,15 @@ import com.bootcamp.ntt.card_service.exception.CardServiceException;
 import com.bootcamp.ntt.card_service.mapper.CardMapper;
 import com.bootcamp.ntt.card_service.mapper.CreditCardMapper;
 import com.bootcamp.ntt.card_service.mapper.DebitCardMapper;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.CustomerCardsSummaryResponse;
+import com.bootcamp.ntt.card_service.model.CardsPeriodicReportResponse;
+import com.bootcamp.ntt.card_service.model.CardsPeriodicReportResponseReportPeriod;
+import com.bootcamp.ntt.card_service.model.CardMovementsResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardResponse;
+import com.bootcamp.ntt.card_service.model.CreditCardsReport;
+import com.bootcamp.ntt.card_service.model.DebitCardResponse;
+import com.bootcamp.ntt.card_service.model.DebitCardsReport;
+import com.bootcamp.ntt.card_service.model.TransactionsSummary;
 import com.bootcamp.ntt.card_service.service.CardConsolidationService;
 import com.bootcamp.ntt.card_service.service.CreditCardService;
 import com.bootcamp.ntt.card_service.service.DebitCardService;
@@ -18,11 +26,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service

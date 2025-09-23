@@ -30,4 +30,6 @@ public interface ExternalServiceWrapper {
   Mono<TransactionsSummary> getDebitCardTransactionsSummaryWithCircuitBreaker(LocalDate startDate, LocalDate endDate);
 
   Flux<TransactionResponse> getLastCardMovementsWithCircuitBreaker(String cardId, Integer limit);
+
+  Mono<Void> createDebitCardPurchaseTransactionWithCircuitBreaker(TransactionRequest transactionRequest);
 }

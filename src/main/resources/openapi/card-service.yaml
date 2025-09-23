@@ -1,4 +1,4 @@
-pero pqopenapi: 3.0.3
+openapi: 3.0.3
 info:
   title: Card Service API
   version: 1.0.0
@@ -1289,7 +1289,7 @@ components:
           format: double
           minimum: 0.01
           example: 150.00
-        merchantInfo:
+        description:
           type: string
           example: "Amazon Purchase"
         transactionType:

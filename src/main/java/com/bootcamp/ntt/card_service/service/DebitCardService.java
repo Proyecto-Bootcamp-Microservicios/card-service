@@ -1,5 +1,11 @@
 package com.bootcamp.ntt.card_service.service;
-import com.bootcamp.ntt.card_service.model.*;
+import com.bootcamp.ntt.card_service.model.DebitCardResponse;
+import com.bootcamp.ntt.card_service.model.DebitCardCreateRequest;
+import com.bootcamp.ntt.card_service.model.DebitCardUpdateRequest;
+import com.bootcamp.ntt.card_service.model.AssociateAccountRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseRequest;
+import com.bootcamp.ntt.card_service.model.DebitPurchaseResponse;
+import com.bootcamp.ntt.card_service.model.PrimaryAccountBalanceResponse;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 public interface DebitCardService {

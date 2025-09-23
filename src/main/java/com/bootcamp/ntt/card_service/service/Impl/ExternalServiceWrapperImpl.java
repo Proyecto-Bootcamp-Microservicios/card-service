@@ -154,6 +154,19 @@ public class ExternalServiceWrapperImpl implements ExternalServiceWrapper {
       .onErrorResume(error -> handleCardMovementsError(cardId, error));
   }
 
+  /**
+   * Llama al transaction-service específico para débito con circuit breaker
+   */
+  @Override
+  public Mono<Void> createDebitCardPurchaseTransactionWithCircuitBreaker(TransactionRequest transactionRequest) {
+    return transactionServiceClient.createDebitCardPurchaseTransaction(transactionRequest)
+      .transformDeferred(CircuitBreakerOperator.of(transactionServiceCircuitBreaker))
+      .transformDeferred(TimeLimiterOperator.of(transactionServiceTimeLimiter))
+      .doOnError(error -> log.error("Debit purchase transaction service call failed for cardNumber={}: {}",
+        transactionRequest.getCardNumber(), error.getMessage()))
+      .onErrorResume(this::handleDebitPurchaseTransactionServiceError);
+  }
+
   // Fallback methods
   private Mono<CustomerTypeResponse> handleCustomerServiceError(Throwable error) {
     log.error("Customer service unavailable - blocking card creation for security: {}", error.getMessage());
@@ -210,5 +223,11 @@ public class ExternalServiceWrapperImpl implements ExternalServiceWrapper {
   private Flux<TransactionResponse> handleCardMovementsError(String cardId, Throwable error) {
     log.warn("Card movements service unavailable for cardId={}, returning empty movements", cardId);
     return Flux.empty();
+  }
+
+  private Mono<Void> handleDebitPurchaseTransactionServiceError(Throwable error) {
+    return Mono.error(new TransactionServiceUnavailableException(
+      "Debit purchase transaction service temporarily unavailable. Purchase cannot be recorded."
+    ));
   }
 }

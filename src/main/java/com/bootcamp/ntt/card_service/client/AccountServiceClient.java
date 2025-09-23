@@ -21,7 +21,7 @@ public class AccountServiceClient {
 
   private final WebClient webClient;
 
-  @Value("${services.account.base-url:http://localhost:8081}")
+  @Value("${services.account.base-url:account-service}")
   private String accountServiceUrl;
 
   public Mono<AccountBalanceResponse> getAccountBalance(String accountId) {
@@ -29,7 +29,7 @@ public class AccountServiceClient {
 
     return webClient
       .get()
-      .uri(accountServiceUrl + "/accounts/{id}/balance", accountId)
+      .uri(accountServiceUrl + "/accounts/{id}", accountId)
       .retrieve()
       .onStatus(HttpStatus::is4xxClientError, response -> {
         log.warn("Account not found: {}", accountId);
